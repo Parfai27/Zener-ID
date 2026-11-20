@@ -1,0 +1,144 @@
+nginx for the KYC platform
+==========================
+
+Two hostnames on the server (203.0.113.10 stands for its address):
+
+  kyc-api.example.com  ->  127.0.0.1:4500   the API, running now
+  kyc.example.com      ->  127.0.0.1:4501   the journey, not deployed yet
+
+4501 is free: taken on that machine are 3000, 3001, 3030, 4000, 4001, 4002, 4500,
+5000, 5001, 7000, 9000, 10000.
+
+DNS, both as A records:
+
+  kyc-api   A   203.0.113.10
+  kyc       A   203.0.113.10
+
+Grey cloud (DNS only) in Cloudflare while certbot runs, or the HTTP-01 challenge
+fights the proxy.
+
+No TLS lines below: certbot --nginx adds the 443 listener, the certificate paths and
+the redirect itself.
+
+
+/etc/nginx/sites-available/kyc-platform-api
+------------------------------------------
+
+# Outside any server block (the top of the file, or a file in /etc/nginx/conf.d/): one
+# shared counter per client address. This is the second layer behind the limits inside
+# the service (app/core/ratelimit.py), which count in memory per process.
+# 20 requests a second sustained is far above a person's use and above the live camera
+# guidance (15 a second); bursts of up to 60 are let through.
+limit_req_zone $binary_remote_addr zone=kyc_api:10m rate=20r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kyc-api.example.com;
+
+    # Documents and PDFs are capped at 10 MB by the service. nginx defaults to 1 MB,
+    # so without this every upload is refused with a 413 that never reaches the app
+    # and leaves nothing in its log.
+    client_max_body_size 12M;
+
+    # Refused with 429 rather than the default 503, so a client can tell "slow down" from
+    # "down".
+    limit_req zone=kyc_api burst=60 nodelay;
+    limit_req_status 429;
+
+    # Security headers. The service sets its own too (app/api/security_headers.py); these cover
+    # responses nginx itself writes (413, 429, 502), which never reach the service. `always`
+    # is what makes nginx add them to error responses.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:4500;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # Load-bearing. uvicorn runs with --proxy-headers, and this is what makes the
+        # service build https://kyc-api.example.com/verify/... instead of
+        # http:// with the container's own hostname. Every session link and QR
+        # depends on it.
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # A document scan is OCR plus a face match, and the first request after a
+        # deploy also loads three models. The 60s defaults would cut those off.
+        proxy_connect_timeout 10s;
+        proxy_send_timeout    180s;
+        proxy_read_timeout    180s;
+    }
+}
+
+
+/etc/nginx/sites-available/kyc-platform
+--------------------------------------
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kyc.example.com;
+
+    # The journey uploads a document and a proof of address.
+    client_max_body_size 12M;
+
+    # Browsers ignore Strict-Transport-Security sent over plain http, so this only takes
+    # effect once TLS is in front (certbot, or the CDN). The rest of the security headers
+    # (CSP, frame-ancestors, Referrer-Policy, Permissions-Policy) are set by the Next.js app
+    # itself in next.config.ts, so they are not repeated here.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:4501;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # For whatever websocket the app opens.
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        proxy_read_timeout 120s;
+    }
+}
+
+
+Commands, in order
+------------------
+
+ln -sf /etc/nginx/sites-available/kyc-platform-api /etc/nginx/sites-enabled/kyc-platform-api
+
+ln -sf /etc/nginx/sites-available/kyc-platform /etc/nginx/sites-enabled/kyc-platform
+
+nginx -t && systemctl reload nginx
+
+certbot --nginx -d kyc-api.example.com -d kyc.example.com
+
+curl -s https://kyc-api.example.com/v1/health
+
+
+Notes
+-----
+
+- Put both server blocks in before running certbot, even though nothing answers on
+  4501 yet, so one run covers both names and the frontend's certificate is waiting.
+  That hostname returns 502 until a container is there, which is expected.
+- If this nginx uses conf.d rather than sites-available, write the two blocks to
+  /etc/nginx/conf.d/kyc-platform-api.conf and /etc/nginx/conf.d/kyc-platform.conf and
+  skip the two ln lines.
+- Once the journey is on kyc.example.com calling the API on the other
+  hostname, the browser will block it until CORS is added to app/main.py, and
+  session_url needs VERIFY_BASE_URL so links point at the journey rather than the
+  API. Neither is nginx's job.
