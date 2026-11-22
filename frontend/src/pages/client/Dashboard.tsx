@@ -25,7 +25,7 @@ export function Dashboard() {
             <Stat label="Verifications" value={data.total} note={`${data.pending} waiting for the applicant`} />
             <Stat label="Verified" value={data.passed} note={`${pct(data.passRate)} pass rate`} tone="var(--ok)" />
             <Stat label="Declined" value={data.failed} note={data.topReasons[0] ? `Top: ${data.topReasons[0][0]}` : 'No declines'} tone="var(--bad)" />
-            <Stat label="Average decision" value={`${data.avgSeconds.toFixed(1)} s`} note="Target: under 15 s" />
+            <Stat label="Average decision" value={data.avgSeconds ? `${data.avgSeconds.toFixed(1)} s` : '—'} note="Target: under 15 s" />
           </div>
           <div className="grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
             <div className="card">
@@ -33,6 +33,12 @@ export function Dashboard() {
                 <span className="card-title">Latest verifications</span>
                 <Link to="/app/verifications" className="row small" style={{ gap: 4, fontWeight: 600 }}>View all <ArrowRight size={14} /></Link>
               </div>
+              {data.recent.length === 0 && (
+                <div className="col" style={{ gap: 10, alignItems: 'flex-start', padding: '8px 0' }}>
+                  <p className="muted" style={{ margin: 0 }}>No verifications yet. Create one and send the link to your customer.</p>
+                  <button className="btn btn-secondary" onClick={() => nav('/app/verifications/new')}><Plus size={16} /> New verification</button>
+                </div>
+              )}
               <table className="table">
                 <tbody>
                   {data.recent.map(v => (

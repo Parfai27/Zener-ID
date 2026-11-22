@@ -2,6 +2,9 @@
 import { Info } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { Link } from "react-router-dom";
+
+import { forgotPassword } from "../../../api";
 import { EMAIL, Field, FormAlert, PasswordInput, SubmitButton, TextInput, sendForm } from "@/components/auth/fields";
 import { AUTH_ERRORS } from "@/lib/auth-errors";
 
@@ -19,7 +22,28 @@ export function SignInForm({ next }: { next?: string }) {
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [alert, setAlert] = useState<string>();
-  const [reset, setReset] = useState<"closed" | "open" | "sent">("closed");
+  const [reset, setReset] = useState<"closed" | "open" | "sending" | "sent">("closed");
+  // Only on a developer's machine with email off: the backend hands the token back.
+  const [devToken, setDevToken] = useState<string | null>(null);
+
+  async function sendReset() {
+    if (!EMAIL.test(email.trim())) {
+      setErrors({ email: "Enter the email address you sign in with." });
+      document.getElementById("email")?.focus();
+      return;
+    }
+    setErrors({});
+    setAlert(undefined);
+    setReset("sending");
+    try {
+      const answer = await forgotPassword(email.trim());
+      setDevToken(answer.reset_token ?? null);
+      setReset("sent");
+    } catch (e) {
+      setReset("open");
+      setAlert((e as Error).message);
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,22 +114,27 @@ export function SignInForm({ next }: { next?: string }) {
         <div className="flex gap-2 rounded-lg bg-brand-tint px-3.5 py-3 text-[14px] text-brand-deep">
           <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
           {reset === "sent" ? (
-            <span>If that address has an account, a link to set a new password is on its way.</span>
+            <span>
+              If that address has an account, a link to set a new password is on its way.
+              {devToken ? (
+                <>
+                  {" "}Email is off on this server, so{" "}
+                  <Link to={`/reset-password?token=${encodeURIComponent(devToken)}`} className="font-medium underline underline-offset-2">
+                    open the reset link here
+                  </Link>
+                  .
+                </>
+              ) : null}
+            </span>
+          ) : reset === "sending" ? (
+            <span>Sending…</span>
           ) : (
             <span>
               Enter your email above, then{" "}
               <button
                 type="button"
                 className="font-medium underline underline-offset-2"
-                onClick={() => {
-                  if (!EMAIL.test(email.trim())) {
-                    setErrors({ email: "Enter the email address you sign in with." });
-                    document.getElementById("email")?.focus();
-                    return;
-                  }
-                  setErrors({});
-                  setReset("sent");
-                }}
+                onClick={sendReset}
               >
                 send me a reset link
               </button>

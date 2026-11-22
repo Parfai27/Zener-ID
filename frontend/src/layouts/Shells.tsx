@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BarChart3, Building2, FileCheck2, Inbox, KeyRound, LayoutGrid, ListChecks, LogOut, Plus, Settings2, ShieldCheck } from 'lucide-react'
-import { currentSession, logout, reviewQueue } from '../api'
+import { currentSession, logout, reviewQueue, verifySession } from '../api'
 import { Avatar, Logo, useData } from '../components/ui'
 
 function NavItem({ to, icon, children, end, count, not }: { to: string; icon: ReactNode; children: ReactNode; end?: boolean; count?: number; not?: string }) {
@@ -15,15 +15,31 @@ function NavItem({ to, icon, children, end, count, not }: { to: string; icon: Re
   )
 }
 
+// The token is checked with the backend when the area opens; if it no longer
+// works (expired, signed out elsewhere, account suspended) the person signs in again.
 export function RequireClient() {
   const loc = useLocation()
-  if (!currentSession('client')) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname)}`} replace />
+  const nav = useNavigate()
+  const signedIn = !!currentSession('client')
+  useEffect(() => {
+    if (!signedIn) return
+    verifySession('client').then(ok => { if (!ok) nav(`/login?expired=1&next=${encodeURIComponent(loc.pathname)}`, { replace: true }) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn])
+  if (!signedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname)}`} replace />
   return <Outlet />
 }
 
 export function RequireStaff() {
   const loc = useLocation()
-  if (!currentSession('staff')) return <Navigate to="/admin/login" replace state={{ from: loc.pathname }} />
+  const nav = useNavigate()
+  const signedIn = !!currentSession('staff')
+  useEffect(() => {
+    if (!signedIn) return
+    verifySession('staff').then(ok => { if (!ok) nav(`/login?expired=1&next=${encodeURIComponent(loc.pathname)}`, { replace: true }) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn])
+  if (!signedIn) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname)}`} replace />
   return <Outlet />
 }
 
@@ -43,8 +59,8 @@ export function ClientShell() {
         <NavItem to="/app/settings" icon={<Settings2 size={18} />}>Settings</NavItem>
         <div className="foot">
           <div className="banner info" style={{ flexDirection: 'column', gap: 4 }}>
-            <b style={{ fontSize: 13 }}>Mock mode</b>
-            <span className="small">Data is stored in this browser only. Nothing reaches the backend yet.</span>
+            <b style={{ fontSize: 13 }}>Partly connected</b>
+            <span className="small">Your account is on the server. Verifications and keys are still kept in this browser.</span>
           </div>
           <div className="account">
             <Avatar name={s.name} />
@@ -79,9 +95,9 @@ export function AdminShell() {
             <Avatar name={s.name} />
             <div className="grow">
               <div style={{ fontWeight: 650, fontSize: 13 }}>{s.name}</div>
-              <div className="small" style={{ color: 'var(--sidebar-text)' }}>Senior reviewer</div>
+              <div className="small" style={{ color: 'var(--sidebar-text)' }}>{s.staff_role ? s.staff_role[0].toUpperCase() + s.staff_role.slice(1) : s.email}</div>
             </div>
-            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--sidebar-text)' }} title="Sign out" onClick={() => { logout('staff'); nav('/admin/login') }}><LogOut size={16} /></button>
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--sidebar-text)' }} title="Sign out" onClick={() => { logout('staff'); nav('/login') }}><LogOut size={16} /></button>
           </div>
         </div>
       </aside>

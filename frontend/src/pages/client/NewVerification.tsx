@@ -88,8 +88,8 @@ function Form({ onCreated }: { onCreated: (v: Verification) => void }) {
             <pre className="mono" style={{ margin: 0, color: '#a9c2ba', whiteSpace: 'pre-wrap' }}>{`POST /v1/verifications
 {
   "applicant": {
-    "first_name": "Aline",
-    "last_name": "Mukamana",
+    "first_name": "Jane",
+    "last_name": "Doe",
     "date_of_birth": "1994-03-14"
   }
 }`}</pre>

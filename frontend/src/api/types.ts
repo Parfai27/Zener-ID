@@ -150,6 +150,8 @@ export interface Session {
   name: string
   email: string
   client_id?: string
+  /** Staff only: the console role (owner, admin, reviewer, support, readonly). */
+  staff_role?: string
 }
 
 /** Sandbox outcomes the tester can force from the applicant page. */

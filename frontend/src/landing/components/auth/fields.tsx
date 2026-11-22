@@ -116,9 +116,9 @@ export type FormAnswer = { redirect?: string; error?: string; fields?: Record<st
  * with the reason for each refused field when the code is "fields".
  */
 export async function sendForm(form: HTMLFormElement): Promise<FormAnswer> {
-  // Mock mode: instead of the Next.js routes (/api/auth/login, /api/auth/signup),
-  // which call the backend's POST /v1/auth/login and /v1/auth/register, the same
-  // checks run against the in-browser mock and answer in the same shape.
+  // Calls the backend's POST /v1/auth/login and /v1/auth/register directly (the
+  // Next.js landing went through its own /api/auth/* routes) and answers in the
+  // same shape those routes did.
   const data = new FormData(form);
   const field = (name: string, trim = true) => {
     const value = data.get(name);
@@ -127,8 +127,10 @@ export async function sendForm(form: HTMLFormElement): Promise<FormAnswer> {
   const action = form.getAttribute("action") ?? "";
   try {
     if (action.endsWith("/login")) {
-      await login(field("email"), field("password", false));
-      return { redirect: safeNext(field("next")) ?? DASHBOARD_URL };
+      const session = await login(field("email"), field("password", false));
+      const next = safeNext(field("next"));
+      if (session.role === "staff") return { redirect: next?.startsWith("/admin") ? next : "/admin" };
+      return { redirect: next && !next.startsWith("/admin") ? next : DASHBOARD_URL };
     }
     const code = field("country");
     await register({
@@ -144,7 +146,16 @@ export async function sendForm(form: HTMLFormElement): Promise<FormAnswer> {
     return { redirect: DASHBOARD_URL };
   } catch (e) {
     const status = e instanceof ApiError ? e.status : 0;
-    if (status === 401 || status === 422) return action.endsWith("/login") ? { error: "invalid" } : { error: "fields", fields: { form: (e as Error).message } };
+    if (action.endsWith("/login") && (status === 401 || status === 422)) return { error: "invalid" };
+    if (status === 422) {
+      // The backend names each refused field; "country_code" is the dialling code beside the phone.
+      const fields: Record<string, string> = {};
+      for (const [name, why] of Object.entries((e as ApiError).fields ?? { form: (e as Error).message })) {
+        if (name === "email") fields.email = "Enter a valid email address, like name@company.com.";
+        else fields[name === "country_code" ? "phone" : name] = why;
+      }
+      return { error: "fields", fields };
+    }
     if (status === 403) return { error: "suspended" };
     if (status === 409) return { error: "exists" };
     if (status === 429) return { error: "busy" };

@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { RotateCcw, Send } from 'lucide-react'
-import { currentSession, resetMockData } from '../../api'
+import { Send, Trash2 } from 'lucide-react'
+import { clearAllData, currentSession } from '../../api'
 import { Pill, useToast } from '../../components/ui'
 
 export function Settings() {
   const toast = useToast()
   const s = currentSession('client')!
   const [tab, setTab] = useState('defaults')
-  const [hook, setHook] = useState('https://api.example.com/kyc/webhook')
+  const [hook, setHook] = useState('')
   return (
     <>
       <div className="page-head">
@@ -15,7 +15,7 @@ export function Settings() {
         <button className="btn btn-primary" onClick={() => toast('Settings saved (in this browser only)')}>Save changes</button>
       </div>
       <div className="tabs">
-        {[['defaults', 'Verification defaults'], ['webhooks', 'Webhooks'], ['team', 'Team'], ['mock', 'Mock data']].map(([k, l]) => (
+        {[['defaults', 'Verification defaults'], ['webhooks', 'Webhooks'], ['team', 'Team'], ['data', 'Data']].map(([k, l]) => (
           <button key={k} className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -29,23 +29,25 @@ export function Settings() {
       )}
       {tab === 'webhooks' && (
         <div className="card col" style={{ gap: 14, maxWidth: 760 }}>
-          <div className="row between"><span className="card-title">Decision webhook</span><Pill tone="ok">Active</Pill></div>
+          <div className="row between"><span className="card-title">Decision webhook</span>{hook.trim() ? <Pill tone="ok">Active</Pill> : <Pill tone="muted">Not set</Pill>}</div>
           <p className="muted small">We POST the decision and reasons to this URL when a verification finishes (events: <span className="mono">verification.accepted</span>, <span className="mono">verification.declined</span>, <span className="mono">verification.review</span>).</p>
-          <div className="row"><input className="input mono grow" value={hook} onChange={e => setHook(e.target.value)} /><button className="btn btn-secondary" onClick={() => toast('Test event queued (mock)')}><Send size={16} /> Send test</button></div>
+          <div className="row"><input className="input mono grow" value={hook} placeholder="https://your-server.com/webhooks/zenerid" onChange={e => setHook(e.target.value)} /><button className="btn btn-secondary" onClick={() => toast('Test event queued (mock)')}><Send size={16} /> Send test</button></div>
         </div>
       )}
       {tab === 'team' && (
         <div className="card" style={{ maxWidth: 760 }}>
-          {[['Aline Bizimana', 'Owner'], ['Jean Kayitare', 'Analyst'], ['Marie Uwase', 'Analyst']].map(([n, r]) => (
-            <div key={n} className="kv"><span className="k" style={{ color: 'var(--ink)', fontWeight: 600 }}>{n}</span><span className="v muted">{r}</span></div>
-          ))}
+          <div className="kv"><span className="k" style={{ color: 'var(--ink)', fontWeight: 600 }}>{s.name}<div className="small muted" style={{ fontWeight: 400 }}>{s.email}</div></span><span className="v muted">Owner</span></div>
         </div>
       )}
-      {tab === 'mock' && (
+      {tab === 'data' && (
         <div className="card col" style={{ gap: 12, maxWidth: 760 }}>
-          <span className="card-title">Reset the mock data</span>
-          <p className="muted small">Everything you created while testing lives in this browser’s storage. Resetting restores the sample verifications, clients and keys.</p>
-          <div><button className="btn btn-secondary" onClick={() => { resetMockData(); toast('Mock data reset') }}><RotateCcw size={16} /> Reset mock data</button></div>
+          <span className="card-title">Clear local data</span>
+          <p className="muted small">Your account is on the server. Verifications and API keys are not connected yet and are kept in this browser’s storage; clearing deletes them for every account in this browser.</p>
+          <div><button className="btn btn-secondary" onClick={() => {
+            if (!window.confirm('Delete every verification and API key kept in this browser? This cannot be undone.')) return
+            clearAllData()
+            toast('Local data cleared')
+          }}><Trash2 size={16} /> Clear local data</button></div>
         </div>
       )}
     </>

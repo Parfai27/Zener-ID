@@ -16,9 +16,11 @@ git clone -b parfait https://github.com/Parfai27/Zener-ID.git zener-id
 cd zener-id
 ```
 
-## Run the frontend (quickest)
+## Run the frontend
 
-Needs **Node.js 18+**. It runs on built-in mock data, so no backend is needed yet.
+Needs **Node.js 18+**, and the backend running on port 8000 (below): sign-in,
+registration and password reset go to it. Everything else still runs on an
+in-browser mock that starts empty.
 
 ```bash
 cd frontend
@@ -28,11 +30,15 @@ npm run dev
 
 Open http://localhost:5173
 
-| Page | Mock sign-in |
+There are no sample accounts: register first.
+
+| Page | Sign-in |
 |---|---|
-| `/` landing, `/signup` register | password of 12+ characters |
-| `/login` client dashboard | `aline@acmebank.rw` + any 6+ character password |
-| `/admin/login` admin console | any email, any 6+ character password, any 6-digit code |
+| `/signup` register | your details, password of 12+ characters (common passwords are refused) |
+| `/login` client dashboard | the email and password you registered with; **Forgot password?** sends a reset link |
+| `/login` → admin console | the same page: a staff account opens the console instead of the dashboard (create one with `python -m app.scripts.console_admin create`, see `backend/README.md`) |
+
+The dev server forwards `/v1` to `http://localhost:8000`; set `BACKEND_URL` to use another address.
 
 ## Run the backend
 
@@ -51,7 +57,9 @@ uvicorn app.main:app --reload --port 8000
 - Download the face models into `backend/models/` first (commands in `backend/README.md`, about 290 MB).
 - On Windows set `PYTHONUTF8=1` before starting, and add Tesseract (`C:\Program Files\Tesseract-OCR`) to `PATH`.
 - API docs: http://localhost:8000/docs
+- Add `DASHBOARD_URL=http://localhost:5173` to `backend/.env` so password-reset links open the frontend. With email off (the default in development) the reset link is shown on the sign-in page instead of being emailed.
 
 ## Status
 
-The frontend is not connected to the backend yet; `frontend/README.md` explains how to connect it.
+Connected: sign-in, registration, forgot / reset password, admin console sign-in.
+Not yet: verifications, API keys, the applicant flow and the admin data still run on the in-browser mock (`frontend/README.md`).

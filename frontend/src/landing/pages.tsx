@@ -1,15 +1,16 @@
 // The landing, sign-in and register pages, ported from the Next.js `landing`
 // repo (src/app/page.tsx, login/page.tsx, signup/page.tsx). Server-only parts
-// (session cookie, redirect) are replaced by the mock session in this browser.
+// (session cookie, redirect) are replaced by the token kept in this browser (src/api/session.ts).
 import { countries as CODES } from 'country-flag-icons'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 
-import { currentSession } from '../api'
+import { ApiError, currentSession, resetPassword } from '../api'
 import { AuthLayout } from '@/components/auth/auth-layout'
-import { FormAlert } from '@/components/auth/fields'
+import { Field, FormAlert, PasswordInput, SubmitButton } from '@/components/auth/fields'
 import { SignInForm } from '@/components/auth/sign-in-form'
 import { SignUpForm } from '@/components/auth/sign-up-form'
+import { BackToTop } from '@/components/back-to-top'
 import { Benefits } from '@/components/benefits'
 import { Checks } from '@/components/checks'
 import { Faq, QUESTIONS } from '@/components/faq'
@@ -67,6 +68,7 @@ export function LandingPage() {
         <ClosingCta />
       </main>
       <Footer />
+      <BackToTop />
     </div>
   )
 }
@@ -78,7 +80,8 @@ export function SignInPage() {
   const message = authError(params.get('error') ?? undefined, params.get('fields') ?? undefined)
   const expired = params.has('expired')
   // Already signed in: straight on to the dashboard.
-  if (!message && !expired && currentSession('client')) return <Navigate to={next ?? DASHBOARD_URL} replace />
+  if (!message && !expired && currentSession('staff')) return <Navigate to={next?.startsWith('/admin') ? next : '/admin'} replace />
+  if (!message && !expired && currentSession('client')) return <Navigate to={next && !next.startsWith('/admin') ? next : DASHBOARD_URL} replace />
 
   return (
     <div className="lp">
@@ -91,10 +94,6 @@ export function SignInPage() {
           {message ? <FormAlert>{message}</FormAlert> : null}
           {!message && expired ? <FormAlert tone="note">Your session has ended. Log in again to carry on.</FormAlert> : null}
           <SignInForm next={next} />
-          <p className="text-[13.5px] text-muted">
-            Platform staff?{' '}
-            <Link to="/admin/login" className="font-medium text-brand hover:underline">Sign in to the admin console</Link>
-          </p>
         </div>
       </AuthLayout>
     </div>
@@ -128,6 +127,66 @@ export function SignUpPage() {
           {message ? <FormAlert>{message}</FormAlert> : null}
           <SignUpForm countries={countries} />
         </div>
+      </AuthLayout>
+    </div>
+  )
+}
+
+/** Where the reset email's link lands: /reset-password?token=... */
+export function ResetPasswordPage() {
+  useTitle('Set a new password | Zener ID')
+  const [params] = useSearchParams()
+  const token = params.get('token') ?? ''
+  const [error, setError] = useState<string>()
+  const [alert, setAlert] = useState<string>()
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const password = String(data.get('password') ?? '')
+    setAlert(undefined)
+    if (password.length < 12) return setError('Use at least 12 characters.')
+    if (password !== String(data.get('confirm') ?? '')) return setError('The two passwords are different.')
+    setError(undefined)
+    setBusy(true)
+    try {
+      await resetPassword(token, password)
+      setDone(true)
+    } catch (e) {
+      const fields = e instanceof ApiError ? e.fields : undefined
+      if (fields?.password) setError(fields.password)
+      else setAlert((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="lp">
+      <AuthLayout switcher={<>Remembered it?{' '}<Link to={SIGN_IN_HREF} className="font-medium text-brand hover:underline">Log in</Link></>}>
+        <h1 className="text-[32px] leading-tight font-bold text-ink">Set a new password</h1>
+        {done ? (
+          <div className="mt-6 flex flex-col gap-5">
+            <FormAlert tone="note">Your password has been changed. Log in with the new one.</FormAlert>
+            <Link to={SIGN_IN_HREF} className="inline-flex h-12 items-center justify-center rounded-[10px] bg-brand-deep px-6 text-[15px] font-semibold text-white hover:bg-brand">Log in</Link>
+          </div>
+        ) : !token ? (
+          <div className="mt-6"><FormAlert>This link is missing its code. Ask for a new reset link from the log in page.</FormAlert></div>
+        ) : (
+          <form noValidate onSubmit={onSubmit} className="mt-8 flex flex-col gap-5">
+            {alert ? <FormAlert>{alert}</FormAlert> : null}
+            <Field id="password" label="New password" error={error}>
+              <PasswordInput id="password" name="password" autoComplete="new-password" invalid={!!error} />
+              {error ? null : <p className="text-[13px] text-muted">At least 12 characters.</p>}
+            </Field>
+            <Field id="confirm" label="Same password again">
+              <PasswordInput id="confirm" name="confirm" autoComplete="new-password" />
+            </Field>
+            <SubmitButton busy={busy}>{busy ? 'Saving' : 'Save new password'}</SubmitButton>
+          </form>
+        )}
       </AuthLayout>
     </div>
   )

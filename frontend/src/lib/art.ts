@@ -1,4 +1,4 @@
-// Placeholder artwork for seeded verifications (no real people or documents).
+// Placeholder artwork used when the mock has no real capture (no real people or documents).
 // Everything is generated SVG, encoded as data: URLs.
 
 const enc = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`

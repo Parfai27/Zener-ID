@@ -1,38 +1,11 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, RefreshCw, Search, X } from 'lucide-react'
-import { adminOverview, adminVerifications, decide, getVerification, listClients, reviewQueue, setClientStatus, staffLogin } from '../../api'
+import { adminOverview, adminVerifications, decide, getVerification, listClients, reviewQueue, setClientStatus } from '../../api'
 import type { Verification, VerificationStatus } from '../../api/types'
-import { AuthSplit } from '../../layouts/Shells'
 import { Avatar, ErrorState, Loading, Pill, Spinner, StatusPill, useData, useToast } from '../../components/ui'
 import { ClaimedCard, EvidenceCard, ExtractedCard, SessionCard } from '../../components/SessionCard'
 import { docLabel, fullName, pct, reasonText, statusInfo, timeAgo, waited } from '../../lib/format'
-
-export function AdminLogin() {
-  const nav = useNavigate()
-  const loc = useLocation() as { state?: { from?: string } }
-  const [f, setF] = useState({ email: 'grace.uwase@zenerid.com', password: '', code: '' })
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const submit = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true); setError('')
-    try { await staffLogin(f.email, f.password, f.code); nav(loc.state?.from || '/admin', { replace: true }) }
-    catch (err) { setError((err as Error).message) } finally { setBusy(false) }
-  }
-  return (
-    <AuthSplit dark title={<>The <span className="em">admin</span> console.</>}>
-      <div><h2 style={{ fontSize: 28, fontWeight: 700 }}>Staff sign in</h2><p className="muted" style={{ marginTop: 4 }}>Use your Zener ID staff account.</p></div>
-      <form className="col" style={{ gap: 14 }} onSubmit={submit}>
-        <div className="field"><label>Staff email</label><input className="input" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required /></div>
-        <div className="field"><label>Password</label><input className="input" type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} placeholder="Any 6+ characters in mock mode" required /></div>
-        <div className="field"><label>Authenticator code</label><input className="input mono" inputMode="numeric" value={f.code} onChange={e => setF({ ...f, code: e.target.value })} placeholder="Any 6 digits in mock mode" required /></div>
-        {error && <div className="error-text">{error}</div>}
-        <button className="btn btn-primary btn-lg btn-block" disabled={busy}>{busy ? <Spinner sm /> : 'Sign in to admin console'}</button>
-      </form>
-      <Link to="/login" className="small" style={{ textAlign: 'center' }}>← Back to client sign in</Link>
-    </AuthSplit>
-  )
-}
 
 export function AdminOverview() {
   const nav = useNavigate()
@@ -40,12 +13,12 @@ export function AdminOverview() {
   if (loading && !data) return <Loading />
   if (error) return <ErrorState message={error} onRetry={reload} />
   const d = data!
-  const max = Math.max(...d.days.map(x => x.passed + x.review + x.failed))
+  const max = Math.max(1, ...d.days.map(x => x.passed + x.review + x.failed))
   return (
     <>
       <div className="page-head"><div><h1>Overview</h1><p>All clients · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div></div>
       <div className="grid g4">
-        {[['Verifications today', d.today.toLocaleString(), '+8% vs last week', 'var(--ok)'], ['Pass rate', pct(d.passRate), 'Across all clients', 'var(--ink-3)'], ['Median decision time', `${d.medianSeconds} s`, 'Target: under 15 s', 'var(--ink-3)'], ['Waiting for review', String(d.queue), d.oldest[0] ? `Oldest: ${waited(d.oldest[0].completed_at)}` : 'Queue is empty', 'var(--warn)']].map(([l, v, n, c]) => (
+        {[['Verifications today', d.today.toLocaleString(), 'Created since midnight', 'var(--ink-3)'], ['Pass rate', d.passRate || d.today ? pct(d.passRate) : '—', 'Across all clients', 'var(--ink-3)'], ['Median decision time', d.medianSeconds ? `${d.medianSeconds.toFixed(1)} s` : '—', 'Target: under 15 s', 'var(--ink-3)'], ['Waiting for review', String(d.queue), d.oldest[0] ? `Oldest: ${waited(d.oldest[0].completed_at)}` : 'Queue is empty', 'var(--warn)']].map(([l, v, n, c]) => (
           <div key={l} className="card stat"><div className="label">{l}</div><div className="value">{v}</div><div className="note" style={{ color: c }}>{n}</div></div>
         ))}
       </div>
@@ -68,6 +41,7 @@ export function AdminOverview() {
         </div>
         <div className="card">
           <div className="card-head"><span className="card-title">Top decline reasons</span></div>
+          {d.topReasons.length === 0 && <p className="muted">Nothing declined yet.</p>}
           <div className="col" style={{ gap: 12 }}>
             {d.topReasons.map(([r, n]) => (
               <div key={r}><div className="row between small"><span className="mono">{r}</span><b>{n}</b></div><div className="hbar" style={{ marginTop: 6 }}><i style={{ width: `${(n / d.topReasons[0][1]) * 100}%` }} /></div></div>
@@ -238,6 +212,7 @@ export function AdminVerifications() {
           <thead><tr><th>Reference</th><th>Applicant</th><th>Client</th><th>Document</th><th>Created</th><th>Status</th></tr></thead>
           <tbody>
             {loading && !data && <tr><td colSpan={6}><Loading /></td></tr>}
+            {data?.length === 0 && <tr><td colSpan={6} className="empty">No verifications yet.</td></tr>}
             {data?.map(v => (
               <tr key={v.id} className="clickable" onClick={() => nav(v.status === 'needs_review' ? `/admin/review/${v.reference}` : `/admin/verifications/${v.reference}`)}>
                 <td className="mono">{v.reference}</td>
@@ -267,6 +242,7 @@ export function Clients() {
           <thead><tr><th>Client</th><th>Plan</th><th style={{ textAlign: 'right' }}>Verifications</th><th style={{ textAlign: 'right' }}>Pass rate</th><th style={{ textAlign: 'right' }}>Active keys</th><th>Status</th><th /></tr></thead>
           <tbody>
             {loading && !data && <tr><td colSpan={7}><Loading /></td></tr>}
+            {data?.length === 0 && <tr><td colSpan={7} className="empty">No clients yet. They appear here when a business registers.</td></tr>}
             {data?.map(c => (
               <tr key={c.id}>
                 <td><div className="row" style={{ gap: 10 }}><Avatar name={c.name} /><div><b>{c.name}</b><div className="small muted">{c.email}</div></div></div></td>

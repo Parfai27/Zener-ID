@@ -1,12 +1,12 @@
 import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './landing/landing.css'
 import './styles.css'
 import './shufti.css'
 import { ToastProvider } from './components/ui'
 import { AdminShell, ClientShell, RequireClient, RequireStaff } from './layouts/Shells'
-import { LandingPage, SignInPage, SignUpPage } from './landing/pages'
+import { LandingPage, ResetPasswordPage, SignInPage, SignUpPage } from './landing/pages'
 import { Dashboard } from './pages/client/Dashboard'
 import { Verifications } from './pages/client/Verifications'
 import { NewVerification } from './pages/client/NewVerification'
@@ -14,7 +14,7 @@ import { VerificationDetail } from './pages/client/VerificationDetail'
 import { ApiKeys } from './pages/client/ApiKeys'
 import { Settings } from './pages/client/Settings'
 import { ApplicantFlow } from './pages/applicant/Flow'
-import { AdminLogin, AdminOverview, AdminVerifications, CaseReview, Clients, ReviewQueue } from './pages/admin/Admin'
+import { AdminOverview, AdminVerifications, CaseReview, Clients, ReviewQueue } from './pages/admin/Admin'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -43,6 +43,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/v/:token" element={<ApplicantFlow />} />
 
           <Route element={<RequireClient />}>
@@ -56,7 +57,7 @@ createRoot(document.getElementById('root')!).render(
             </Route>
           </Route>
 
-          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
           <Route element={<RequireStaff />}>
             <Route element={<AdminShell />}>
               <Route path="/admin" element={<AdminOverview />} />

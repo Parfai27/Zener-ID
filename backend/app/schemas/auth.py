@@ -58,6 +58,8 @@ class AccountResponse(BaseModel):
     address: str | None
     is_active: bool
     created_at: datetime
+    # Set for platform staff, so one sign-in page can send them to the console.
+    console_role: str | None = None
 
 
 class TokenResponse(BaseModel):

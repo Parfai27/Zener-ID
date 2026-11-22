@@ -54,6 +54,7 @@ def _as_response(account: Account) -> AccountResponse:
         address=account.address,
         is_active=account.is_active,
         created_at=account.created_at,
+        console_role=account.console_role or None,
     )
 
 

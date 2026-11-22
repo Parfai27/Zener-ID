@@ -5,8 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 const dir = (p: string) => fileURLToPath(new URL(p, import.meta.url))
 
-// The frontend runs entirely on mock data for now (src/api/mock.ts).
-// When the backend is wired in, `server.proxy` will forward /v1 to FastAPI.
+// Sign-in, registration and password reset call the backend (src/api/auth.ts);
+// the rest still runs on the in-browser mock (src/api/mock.ts). In development
+// /v1 is forwarded to FastAPI, so the browser talks to one origin.
 export default defineConfig({
   // Tailwind powers the landing, sign-in and register pages (src/landing).
   plugins: [react(), tailwindcss()],
@@ -17,5 +18,9 @@ export default defineConfig({
       'next/link': dir('./src/landing/shims/next-link.tsx'),
     },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // BACKEND_URL overrides where the API runs (default: uvicorn on port 8000).
+    proxy: { '/v1': { target: process.env.BACKEND_URL || 'http://localhost:8000', changeOrigin: true } },
+  },
 })
