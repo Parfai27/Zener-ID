@@ -1,6 +1,6 @@
-import { ButtonLink } from "@/components/ui";
-import { VerificationReel } from "@/components/verification-reel";
-import { SIGN_UP_HREF } from "@/lib/site";
+import { ButtonLink } from "@/landing/components/ui";
+import { VerificationReel } from "@/landing/components/verification-reel";
+import { SIGN_UP_HREF } from "@/landing/lib/site";
 
 export function Hero() {
   return (

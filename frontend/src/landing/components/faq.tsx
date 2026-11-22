@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 
-import { SectionHeading } from "@/components/ui";
-import { CONTACT_EMAIL, CONTACT_HREF } from "@/lib/site";
+import { SectionHeading } from "@/landing/components/ui";
+import { CONTACT_EMAIL, CONTACT_HREF } from "@/landing/lib/site";
 
 export const QUESTIONS = [
   {

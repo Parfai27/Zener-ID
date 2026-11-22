@@ -1,6 +1,6 @@
 import { EyeOff, FileClock, History, KeyRound, LockKeyhole, UserCheck } from "lucide-react";
 
-import { IconMark, SectionHeading } from "@/components/ui";
+import { IconMark, SectionHeading } from "@/landing/components/ui";
 
 const MEASURES = [
   {

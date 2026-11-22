@@ -1,18 +1,17 @@
 /** Where things live, stated once so every link on the page agrees. */
 export const PRODUCT = "Zener ID";
-export const SITE = import.meta.env.VITE_SITE_URL ?? "https://zenerid.com";
+export const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://zenerid.com";
 
 /** The API clients call. */
-export const API_URL = import.meta.env.VITE_API_URL ?? "https://api.zenerid.com";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.zenerid.com";
 
 /**
- * The client dashboard. In this app the landing, sign-in, register and dashboard
- * live together, so it is a path. (In the separate Next.js `landing` repo it was
- * another site, reached through a shared session cookie.)
+ * The company dashboard. The landing, sign-in, register and dashboard live in
+ * this one Next.js app, so these are paths.
  */
-export const DASHBOARD_URL = "/app";
+export const DASHBOARD_URL = "/dashboard";
 export const SIGN_IN_HREF = "/login";
-export const SIGN_UP_HREF = "/signup";
+export const SIGN_UP_HREF = "/register";
 
 /** Where "Contact sales" writes to. */
 export const CONTACT_EMAIL = "hello@zenerid.com";

@@ -1,11 +1,11 @@
-
+"use client";
 import { geoCentroid, geoDistance, geoOrthographic, geoPath, type GeoPermissibleObjects } from "d3-geo";
 import type { Feature, MultiLineString } from "geojson";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 
-import { STEP_MS, type Person } from "@/components/verification-reel/people";
+import { STEP_MS, type Person } from "@/landing/components/verification-reel/people";
 
 type Rotation = [lambda: number, phi: number];
 

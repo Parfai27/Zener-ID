@@ -1,9 +1,9 @@
-
+"use client";
 import { Check, FileText, Fingerprint, House, ScanFace, ShieldCheck } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { Grain } from "@/components/brand/grain";
-import { SectionHeading } from "@/components/ui";
+import { Grain } from "@/landing/components/brand/grain";
+import { SectionHeading } from "@/landing/components/ui";
 
 function Tick({ children }: { children: ReactNode }) {
   return (

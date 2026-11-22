@@ -1,6 +1,6 @@
 import { Link2, Smartphone, FileCheck2 } from "lucide-react";
 
-import { SectionHeading } from "@/components/ui";
+import { SectionHeading } from "@/landing/components/ui";
 
 const STEPS = [
   {

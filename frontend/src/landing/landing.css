@@ -1,10 +1,9 @@
 @import "tailwindcss";
 
-/* Next.js set these from next/font; here the fonts come from the Google Fonts
-   link in index.html. */
+/* The fonts are bundled from npm (@fontsource-variable), imported in the layout. */
 :root {
-  --font-inter: "Inter";
-  --font-manrope: "Manrope";
+  --font-inter: "Inter Variable";
+  --font-manrope: "Manrope Variable";
 }
 
 /* The landing, sign-in and register pages sit on white (the dashboard is on Paper). */

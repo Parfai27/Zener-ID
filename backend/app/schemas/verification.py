@@ -253,6 +253,9 @@ class VerificationDetailResponse(VerificationResponse):
     evidence: list[ConsoleFile]
     # Decisions the compliance team made on it, oldest first.
     reviews: list[ConsoleReviewEvent] = []
+    # What the client said about the person when opening it: their own input,
+    # shown back so it can be set against what the document proved.
+    claimed: dict = {}
 
 
 class SessionResponse(BaseModel):

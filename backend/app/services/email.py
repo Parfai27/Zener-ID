@@ -62,6 +62,39 @@ def send_password_reset(email: str, token: str) -> bool:
     return True
 
 
+class EmailNotConfigured(Exception):
+    """Sending is off on this server (EMAIL_ENABLED, SMTP_HOST)."""
+
+
+class EmailFailed(Exception):
+    """The mail server refused the message or could not be reached."""
+
+
+def send_verification_link(email: str, *, name: str | None, company: str, link: str, expires: str | None) -> None:
+    """Send a person the link to their verification. Raises EmailNotConfigured or EmailFailed.
+
+    Unlike the password reset, the company is waiting on the answer, so not
+    sending says why instead of returning quietly.
+    """
+    if not (settings.EMAIL_ENABLED and settings.SMTP_HOST):
+        raise EmailNotConfigured("Email is not set up on this server")
+    greeting = f"Hello {name}," if name else "Hello,"
+    until = f"\n\nThe link works until {expires}." if expires else ""
+    try:
+        _send(
+            email,
+            f"{company} asks you to verify your identity",
+            f"{greeting}\n\n{company} uses Zener ID to verify the identity of its customers. "
+            "It takes a few minutes: you photograph an identity document and take a short face check.\n\n"
+            f"Open this secure link to start:\n{link}{until}\n\n"
+            "Do not share this link: it is yours alone. If you were not expecting this, ignore this message.",
+        )
+    except (OSError, smtplib.SMTPException) as problem:
+        # Where it went is logged; the link itself is not.
+        logger.exception("Could not send the verification link to %s", email)
+        raise EmailFailed("The mail server could not send it") from problem
+
+
 def reveal_token_to_caller() -> bool:
     """Whether the reset token may be returned in the API response.
 

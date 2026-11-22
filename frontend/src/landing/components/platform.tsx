@@ -1,4 +1,4 @@
-
+"use client";
 import {
   FileBarChart,
   FileText,
@@ -15,8 +15,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { Grain } from "@/components/brand/grain";
-import { SectionHeading } from "@/components/ui";
+import { Grain } from "@/landing/components/brand/grain";
+import { SectionHeading } from "@/landing/components/ui";
 
 type Item = { icon: LucideIcon; label: string };
 

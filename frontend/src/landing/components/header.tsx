@@ -1,5 +1,4 @@
-
-import { currentSession } from "../../api";
+"use client";
 import {
   BookOpen,
   Building2,
@@ -25,8 +24,8 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { Wordmark } from "@/components/logo";
-import { CONTACT_HREF, DASHBOARD_URL, SIGN_IN_HREF, SIGN_UP_HREF } from "@/lib/site";
+import { Wordmark } from "@/landing/components/logo";
+import { CONTACT_HREF, DASHBOARD_URL, SIGN_IN_HREF, SIGN_UP_HREF } from "@/landing/lib/site";
 
 type MenuItem = { icon: LucideIcon; label: string; text: string; href: string };
 type NavEntry = { label: string; href?: string; items?: MenuItem[] };
@@ -73,14 +72,15 @@ const NAV: NavEntry[] = [
 ];
 
 /**
- * Whether this browser is signed in to the dashboard. Mock mode: the session
- * lives in this browser (src/api/mock.ts). With the backend this becomes a
- * check of the session with GET /v1/auth/me.
+ * Whether this browser is signed in to the dashboard: the session cookie is
+ * httpOnly, so ask the backend (GET /v1/auth/me, through the /api/zid proxy).
  */
 function useSignedIn() {
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
-    setSignedIn(currentSession("client") !== null);
+    fetch("/api/zid/auth/me")
+      .then((res) => setSignedIn(res.ok))
+      .catch(() => setSignedIn(false));
   }, []);
   return signedIn;
 }

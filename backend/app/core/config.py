@@ -165,6 +165,19 @@ class Settings(BaseSettings):
     SMTP_STARTTLS: bool = True
     EMAIL_FROM: str = "Zener ID <no-reply@example.com>"
 
+    # Text messages, for sending a person their verification link (app/services/sms.py).
+    # SMS_PROVIDER is "africastalking" or "twilio"; empty leaves SMS off.
+    SMS_PROVIDER: str = ""
+    # Africa's Talking: the app's username ("sandbox" for the sandbox) and API key.
+    # AT_SENDER_ID is an approved alphanumeric sender name; empty uses their shortcode.
+    AT_USERNAME: str = ""
+    AT_API_KEY: str = ""
+    AT_SENDER_ID: str = ""
+    # Twilio: the account SID, its auth token, and the number (or sender) it sends from.
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM: str = ""
+
     # Limits on one account.
     MAX_API_KEYS_PER_ACCOUNT: int = 10
     # Verifications one account may open in a day (0 is no limit).

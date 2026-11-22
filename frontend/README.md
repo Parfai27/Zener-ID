@@ -1,80 +1,101 @@
-# Zener ID — frontend (mock mode)
+# Zener ID — Company Dashboard (Frontend)
 
-The web app for Zener ID: the **landing page** with **sign in** and **register**, the
-**client dashboard**, the **applicant verification flow** and the **admin (reviewer)
-console**. The landing, sign-in and register pages are ported from the
-[`landing`](https://github.com/Rootway-Labs/landing) repo (Next.js) into `src/landing/`
-(Tailwind CSS v4); `next/link` is mapped to the router by a small shim, and the forms
-call the mock instead of the Next.js `/api/auth/*` routes. Visual style and flow follow Shufti
-(session card with short result words, white cards), styled with the Zener ID brand
-(`zenerid_brand.pdf`): official logo and favicons in `public/`, Deep Pine / Paper /
-Evergreen / Mint palette, Manrope ExtraBold headings and Inter body text.
+The company dashboard is where a company (our client) verifies its customers.
+The company signs in, enters a customer's details, sends the customer a
+verification link or QR code, and follows the result.
 
-**It is not connected to the backend yet.** All data comes from an in-browser mock
-(`src/api/mock.ts`) stored in `localStorage`, so the UI can be checked first.
+- **Built with:** Next.js 15, TypeScript, Tailwind CSS
+- **Data:** everything is saved in PostgreSQL through the backend. A new company
+  starts with an empty dashboard and no sample data.
 
-## Run it
+## How to run it
+
+1. Start the backend first. It must run on `http://localhost:8000`.
+2. Then run the frontend:
 
 ```bash
-cd zener-id/frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Use `localhost` (or https) — browsers only allow the
-camera there.
+3. Open **http://localhost:5173**.
+4. Create an account at `/register`, or sign in at `/login`.
 
-| Who | Where | Mock sign-in |
+## The pages
+
+| Page | Address | What it does |
 |---|---|---|
-| Visitor | `/` | the landing page |
-| New client | `/signup` | two steps: name, email, password (12+ characters); country, phone, date of birth |
-| Client | `/login` | `aline@acmebank.rw` (or the email you registered) + any password of 6+ characters |
-| Staff / reviewer | `/admin/login` | any email, any 6+ char password, any 6-digit code |
-| Applicant | `/v/<token>` | the link shown after creating a verification |
+| **Overview** | `/dashboard` | Shows total verifications, verified users, pending and failed, plus the latest activity. |
+| **New verification** | `/dashboard/verifications/new` | A form for the customer's first name, last name, date of birth, email, phone and country. |
+| **Link & QR code** | `/dashboard/verifications/<ref>/link` | Shows the customer's link and QR code. You can copy the link, download the QR code, or send the link by Email, SMS or WhatsApp. |
+| **Verified users** | `/dashboard/verified` | Customers who passed verification, with search and date filters. |
+| **All verifications** | `/dashboard/verifications` | Every request, with tabs: Pending, Processing, In review, Completed, Failed, Expired. |
+| **Verification details** | `/dashboard/verifications/<ref>` | One customer's details, check results, captured photos, and a PDF report to download. |
+| **API keys** | `/dashboard/api-keys` | Create or revoke keys, so the company's own systems can use the API. |
+| **Settings** | `/dashboard/settings` | Account details. |
 
-## Try the whole loop
+## How the flow works
 
-1. Sign in as the client → **New verification** → fill in the applicant → **Create**. The applicant flow follows Shufti's hosted layout and order: consent → face → document (country, type, photo or upload, front and back, "Check your photo") → verification → completed.
-2. Click **Open** on the link (new tab) to act as the applicant.
-3. Use the **Sandbox** box (bottom-left) to choose the outcome: pass, face mismatch,
-   borderline (goes to review), liveness fail, name / DOB mismatch, expired, under 18,
-   or "first photo blurry".
-4. Capture the document with the camera, upload a photo, or use the sample buttons.
-   The blur / light / size check runs for real in the browser (Laplacian variance).
-5. Do the face check (look straight, left, right). Without a camera there is a
-   "continue without a camera (mock only)" button.
-6. Back in the dashboard the verification shows its decision and reasons.
-7. Borderline cases appear in **/admin/review**: approve, decline or ask to retry, with a note.
+1. The company fills in **New verification**.
+2. The backend creates a unique link, and the dashboard shows it with a QR code.
+3. The company sends the link to the customer (email, SMS, WhatsApp, or the QR code).
+4. The customer opens the link, takes a photo of their ID, and does a face check.
+5. The result appears in the dashboard: **Verified**, **Declined** or **In review**.
 
-Reset everything from **Settings → Mock data**.
+## Sending the link by email and SMS
 
-## Structure
+- **WhatsApp** works straight away. It opens WhatsApp with the message ready.
+- **Email** and **SMS** are sent by the backend, through this API:
 
 ```
-src/
-  api/types.ts      shapes mirroring kyc-backend schemas (statuses, checks, session)
-  api/mock.ts       mock backend: store, seed data, decision engine, latency
-  api/index.ts      single import point — swap mock for HTTP here later
-  lib/quality.ts    in-browser image quality check (blur, light, size)
-  lib/format.ts     labels, result words, reason-code text
-  components/       UI kit, Shufti-style SessionCard
-  layouts/          client shell, admin shell, auth split
-  pages/client/     login, dashboard, verifications, new, detail, API keys, settings
-  pages/applicant/  the verification flow + camera hook
-  pages/admin/      staff login, overview, review queue, case review, verifications, clients
+POST /v1/verifications/{reference}/send
+
+{ "channel": "email" }                         → sends to the customer's email
+{ "channel": "sms", "to": "+250788123456" }    → sends to this phone number
 ```
 
-## Connecting the backend later
+If `to` is left out, the backend uses the email or phone entered when the
+verification was created. Phone numbers must start with `+` and the country code.
 
-The status vocabulary already matches the backend (`pending`, `in_progress`, `passed`,
-`failed`, `needs_review`, `expired`; checks `pass` / `fail` / `review`). To connect:
+To make sending work, add these settings to `backend/.env`, then **restart the backend**.
 
-1. Add `src/api/http.ts` exporting the same functions, calling `/v1/...`
-   (e.g. `POST /v1/verifications`, `GET /v1/verifications/{reference}`,
-   `GET /v1/sessions/{token}`, `POST /v1/sessions/{token}/document`, `.../face`,
-   `/v1/console/reviews/{id}/approve`).
-2. Switch the export in `src/api/index.ts`.
-3. Add a dev proxy for `/v1` → `http://localhost:8000` in `vite.config.ts`.
+**Email (Gmail)**: needs a Gmail *app password*: https://myaccount.google.com/apppasswords
 
-Mock-only pieces to replace then: the QR code (not scannable — the backend serves a
-real one), the PDF report button, and the sandbox outcome panel.
+```
+EMAIL_ENABLED=true
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=your-app-password
+EMAIL_FROM=Zener ID <you@gmail.com>
+```
+
+**SMS (Africa's Talking)**: get the API key from your **sandbox app**: https://account.africastalking.com
+
+```
+SMS_PROVIDER=africastalking
+AT_USERNAME=sandbox
+AT_API_KEY=your-sandbox-api-key
+```
+
+Sandbox messages appear only in the Africa's Talking simulator, not on real phones.
+For real phones, use a live app with credit.
+
+## Folders
+
+```
+src/app/(dashboard)/   the dashboard pages, sign in and register
+src/app/api/           sign-in cookie and the bridge to the backend
+src/components/        shared parts: sidebar, tables, filters, QR code, send dialog
+src/lib/               backend calls, types, formatting
+```
+
+## Common problems
+
+| Problem | Solution |
+|---|---|
+| "Cannot reach the Zener ID backend" | Start the backend on port 8000. |
+| "Email / SMS is not set up on this server" | Add the settings above to `backend/.env` and restart the backend. |
+| "Africa's Talking rejected the username or API key" | Use the key from the sandbox app with `AT_USERNAME=sandbox`. |
+| The link does not open on a phone | `localhost` links only work on this computer. Run the backend at a public address. |

@@ -1,4 +1,4 @@
-import { SectionHeading } from "@/components/ui";
+import { SectionHeading } from "@/landing/components/ui";
 
 const BENEFITS = [
   {

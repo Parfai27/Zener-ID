@@ -1,9 +1,9 @@
-
+"use client";
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 
-import { Grain } from "@/components/brand/grain";
-import { MapGlobe } from "@/components/verification-reel/map-globe";
-import { PEOPLE, STEP_MS, type Person } from "@/components/verification-reel/people";
+import { Grain } from "@/landing/components/brand/grain";
+import { MapGlobe } from "@/landing/components/verification-reel/map-globe";
+import { PEOPLE, STEP_MS, type Person } from "@/landing/components/verification-reel/people";
 
 /**
  * When, within each step, the row has slid over, the scan ring fills, and the

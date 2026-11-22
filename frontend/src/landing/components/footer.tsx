@@ -1,8 +1,8 @@
-import { Rings } from "@/components/brand/rings";
-import { Grain } from "@/components/brand/grain";
-import { Wordmark } from "@/components/logo";
-import { ButtonLink } from "@/components/ui";
-import { CONTACT_EMAIL, CONTACT_HREF, PRIVACY_URL, PRODUCT, SIGN_IN_HREF, SIGN_UP_HREF, TERMS_URL } from "@/lib/site";
+import { Rings } from "@/landing/components/brand/rings";
+import { Grain } from "@/landing/components/brand/grain";
+import { Wordmark } from "@/landing/components/logo";
+import { ButtonLink } from "@/landing/components/ui";
+import { CONTACT_EMAIL, CONTACT_HREF, PRIVACY_URL, PRODUCT, SIGN_IN_HREF, SIGN_UP_HREF, TERMS_URL } from "@/landing/lib/site";
 
 /** The closing call to action: a grainy brand gradient with scan rings half off the right edge. */
 export function ClosingCta() {

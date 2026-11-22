@@ -11,18 +11,21 @@ Two audiences, two kinds of access:
 """
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import Caller, account_from_api_key, current_caller
+from app.api.deps import Caller, current_caller, current_client
 from app.api.v1.routes import console_verifications as views
 from app.core import ratelimit, urls
 from app.core.config import settings
 from app.db.models import (
     Account,
+    AuditEvent,
     FileKind,
     StepStatus,
     Verification,
@@ -41,6 +44,8 @@ from app.schemas.verification import (
 )
 from app.reports import verification as report
 from app.services import billing
+from app.services import email as email_service
+from app.services import sms
 from app.services import due_diligence as forms
 from app.services import verifications as service
 from app.storage import evidence
@@ -100,10 +105,13 @@ def _as_response(verification: Verification) -> VerificationResponse:
 def create_verification(
     body: CreateVerificationRequest,
     request: Request,
-    account: Account = Depends(account_from_api_key),
+    account: Account = Depends(current_client),
     db: Session = Depends(get_session),
 ) -> VerificationResponse:
     """Open a verification and get back the link to send the person.
+
+    Taken from a client's API key or from the company dashboard, signed in as the
+    client. Staff do not open verifications on a client's behalf.
 
     The record exists from this moment, before they have done anything, so every
     step, image and callback that follows has something to hang off.
@@ -201,6 +209,97 @@ def create_verification(
     return _as_response(verification)
 
 
+class SendLinkRequest(BaseModel):
+    channel: Literal["email", "sms"]
+    # Left out, the email address or phone number given when it was opened.
+    to: str | None = Field(default=None, max_length=254)
+
+
+class SendLinkResponse(BaseModel):
+    channel: str
+    to: str
+    sent: bool = True
+
+
+@router.post(
+    "/verifications/{reference}/send",
+    response_model=SendLinkResponse,
+    dependencies=[ratelimit.limit("send-link", 30, 3600, by="token")],
+)
+def send_verification_link(
+    reference: str,
+    body: SendLinkRequest,
+    account: Account = Depends(current_client),
+    db: Session = Depends(get_session),
+) -> SendLinkResponse:
+    """Send the person their link by email or SMS, from this service.
+
+    Only while the verification is still open: a link to one that has been
+    decided or has expired would only lead them to a dead end.
+    """
+    verification = service.by_reference(db, account.id, reference)
+    if verification is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No verification with that reference")
+    verification = service.expire_if_due(db, verification)
+    if verification.status.value not in ("pending", "in_progress"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "This verification is no longer open, so its link cannot be sent")
+
+    claimed = verification.claimed or {}
+    link = _as_response(verification).session_url
+    company = " ".join(part for part in (account.first_name, account.last_name) if part) or "A company"
+    expires = verification.expires_at.strftime("%d %b %Y, %H:%M UTC") if verification.expires_at else None
+
+    if body.channel == "email":
+        to = (body.to or claimed.get("email") or "").strip()
+        if not to or "@" not in to:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Give an email address to send the link to")
+        try:
+            email_service.send_verification_link(
+                to, name=claimed.get("first_name"), company=company, link=link, expires=expires
+            )
+        except email_service.EmailNotConfigured:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Email is not set up on this server yet (EMAIL_ENABLED and SMTP_* in backend/.env)",
+            )
+        except email_service.EmailFailed as problem:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(problem))
+    else:
+        to = sms.normalise(body.to or claimed.get("phone") or "")
+        if to is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Give the phone number in international format, e.g. +250788123456",
+            )
+        name = claimed.get("first_name")
+        text = (
+            f"{'Hello ' + name + ', ' if name else ''}{company} asks you to verify your identity with Zener ID. "
+            f"Open: {link}"
+        )
+        try:
+            sms.send(to, text)
+        except sms.SmsNotConfigured:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "SMS is not set up on this server yet (SMS_PROVIDER and its keys in backend/.env)",
+            )
+        except sms.SmsFailed as problem:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(problem))
+
+    # Who was sent what, and when; never the link itself, which is the credential.
+    db.add(
+        AuditEvent(
+            verification_id=verification.id,
+            applicant_id=verification.applicant_id,
+            event_type=f"verification.link_sent.{body.channel}",
+            actor=str(account.id),
+            payload={"channel": body.channel, "to": to},
+        )
+    )
+    db.commit()
+    return SendLinkResponse(channel=body.channel, to=to)
+
+
 # Who reads a verification by reference: the client it belongs to (its API key or
 # its dashboard session), or staff naming the client, since a reference
 # is only unique within one client.
@@ -275,6 +374,7 @@ def read_verification(
         files=full.files,
         evidence=full.evidence,
         reviews=reviews,
+        claimed=verification.claimed or {},
     )
 
 

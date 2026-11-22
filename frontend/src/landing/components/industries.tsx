@@ -1,6 +1,6 @@
 import { Bitcoin, Building2, CandlestickChart, HandCoins, ShieldPlus, Store } from "lucide-react";
 
-import { IconMark, SectionHeading } from "@/components/ui";
+import { IconMark, SectionHeading } from "@/landing/components/ui";
 
 const INDUSTRIES = [
   { icon: Building2, label: "Fintech and payments", text: "Onboard users in your app before money moves." },
