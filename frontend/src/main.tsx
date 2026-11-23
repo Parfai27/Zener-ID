@@ -45,6 +45,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/v/:token" element={<ApplicantFlow />} />
+          {/* The backend builds links as <VERIFY_BASE_URL>/verify/<token>. */}
+          <Route path="/verify/:token" element={<ApplicantFlow />} />
 
           <Route element={<RequireClient />}>
             <Route element={<ClientShell />}>

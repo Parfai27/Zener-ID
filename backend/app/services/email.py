@@ -22,16 +22,24 @@ import ssl
 from email.message import EmailMessage
 
 from app.core.config import settings
+from app.services import email_templates
 
 logger = logging.getLogger(__name__)
 
 
-def _send(to: str, subject: str, body: str) -> None:
+def _send(to: str, subject: str, body: str, html: str | None = None, images: dict[str, bytes] | None = None) -> None:
+    """Send one email. With `html` the message carries both a plain-text and an
+    HTML version, and `images` travel inline so the HTML can show them as cid:<key>."""
     message = EmailMessage()
     message["From"] = settings.EMAIL_FROM
     message["To"] = to
     message["Subject"] = subject
     message.set_content(body)
+    if html:
+        message.add_alternative(html, subtype="html")
+        html_part = message.get_body(("html",))
+        for cid, data in (images or {}).items():
+            html_part.add_related(data, maintype="image", subtype="png", cid=f"<{cid}>", filename=f"{cid}.png")
     with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
         if settings.SMTP_STARTTLS:
             server.starttls(context=ssl.create_default_context())
@@ -40,7 +48,7 @@ def _send(to: str, subject: str, body: str) -> None:
         server.send_message(message)
 
 
-def send_password_reset(email: str, token: str) -> bool:
+def send_password_reset(email: str, token: str, first_name: str | None = None) -> bool:
     """Send someone a link for setting a new password. Returns whether it was sent."""
     link = f"{settings.DASHBOARD_URL.rstrip('/')}/reset-password?token={token}"
     if not (settings.EMAIL_ENABLED and settings.SMTP_HOST):
@@ -49,13 +57,10 @@ def send_password_reset(email: str, token: str) -> bool:
         logger.info("Password reset requested for %s. Email is off, so nothing was sent.", email)
         return False
     try:
-        _send(
-            email,
-            "Reset your password",
-            f"Someone asked to reset the password for this address.\n\nOpen this link to choose a new one "
-            f"(it works once, for {settings.PASSWORD_RESET_MINUTES} minutes):\n{link}\n\n"
-            "If it was not you, ignore this message and your password stays as it is.",
+        mail = email_templates.password_reset(
+            link=link, minutes=settings.PASSWORD_RESET_MINUTES, email=email, first_name=first_name
         )
+        _send(email, mail.subject, mail.text, mail.html, mail.images)
     except (OSError, smtplib.SMTPException):
         logger.exception("Could not send the password reset email to %s", email)
         return False

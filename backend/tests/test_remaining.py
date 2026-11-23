@@ -101,13 +101,18 @@ def test_a_reset_is_sent_by_smtp_when_it_is_configured(monkeypatch):
         def __exit__(self, *a): return False
         def starttls(self, context=None): sent["tls"] = True
         def login(self, user, password): sent["login"] = user
-        def send_message(self, message): sent["to"], sent["body"] = message["To"], message.get_content()
+        def send_message(self, message):
+            sent["to"] = message["To"]
+            sent["body"] = message.get_body(("plain",)).get_content()
+            sent["html"] = message.get_body(("html",)).get_content()
 
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
     for name, value in {"EMAIL_ENABLED": True, "SMTP_HOST": "smtp.test", "SMTP_USER": "u", "SMTP_PASSWORD": "p"}.items():
         monkeypatch.setattr(settings, name, value)
     assert email_service.send_password_reset("jean@example.com", "TOKEN123") is True
     assert sent["to"] == "jean@example.com" and "TOKEN123" in sent["body"] and sent["tls"] and sent["login"] == "u"
+    # The HTML version carries the same link, and the logo inline (cid:), not from a server.
+    assert "TOKEN123" in sent["html"] and "cid:zenerid-logo" in sent["html"]
 
 
 def test_a_failed_send_reports_false_and_does_not_raise(monkeypatch):

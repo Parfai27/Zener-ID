@@ -4,6 +4,16 @@ import { createApiKey, listApiKeys, revokeApiKey } from '../../api'
 import type { ApiKey, CreatedApiKey } from '../../api/types'
 import { ErrorState, Loading, Modal, Pill, Spinner, copyText, useData, useToast } from '../../components/ui'
 import { dateTime, timeAgo } from '../../lib/format'
+import { API } from '../../api/http'
+
+const STATE: Record<string, { label: string; tone: 'ok' | 'warn' | 'muted' | 'bad' }> = {
+  active: { label: 'Active', tone: 'ok' },
+  expiring: { label: 'Expiring soon', tone: 'warn' },
+  suspended: { label: 'Suspended', tone: 'bad' },
+  expired: { label: 'Expired', tone: 'muted' },
+  revoked: { label: 'Revoked', tone: 'muted' },
+}
+const apiBase = () => `${API || window.location.origin}/v1`
 
 export function ApiKeys() {
   const toast = useToast()
@@ -20,28 +30,29 @@ export function ApiKeys() {
       {error && <ErrorState message={error} onRetry={reload} />}
       <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Expires</th><th>Last used</th><th>Status</th><th /></tr></thead>
           <tbody>
-            {loading && !data && <tr><td colSpan={6}><Loading /></td></tr>}
-            {data?.length === 0 && <tr><td colSpan={6} className="empty">No keys yet.</td></tr>}
+            {loading && !data && <tr><td colSpan={7}><Loading /></td></tr>}
+            {data?.length === 0 && <tr><td colSpan={7} className="empty">No keys yet. Create one to call the API from your own servers.</td></tr>}
             {data?.map(k => (
               <tr key={k.id}>
                 <td><b>{k.name}</b></td>
                 <td><span className="mono">{k.prefix}••••••••</span></td>
                 <td className="muted">{dateTime(k.created_at)}</td>
+                <td className="muted">{dateTime(k.expires_at)}</td>
                 <td className="muted">{k.last_used_at ? timeAgo(k.last_used_at) : 'Never'}</td>
-                <td>{k.revoked ? <Pill tone="muted">Revoked</Pill> : <Pill tone="ok">Active</Pill>}</td>
-                <td style={{ textAlign: 'right' }}>{!k.revoked && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--bad)' }} onClick={() => setRevoke(k)}>Revoke</button>}</td>
+                <td>{(() => { const s = STATE[k.state ?? (k.revoked ? 'revoked' : 'active')] ?? STATE.active; return <Pill tone={s.tone}>{s.label}</Pill> })()}</td>
+                <td style={{ textAlign: 'right' }}>{!k.revoked && k.state !== 'expired' && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--bad)' }} onClick={() => setRevoke(k)}>Revoke</button>}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="grid g2">
-        <div className="card col" style={{ gap: 6 }}><span className="small muted">Base URL</span><span className="mono">https://api.zenerid.com/v1</span><span className="small muted">Send the key as <span className="mono">Authorization: Bearer &lt;key&gt;</span>.</span></div>
+        <div className="card col" style={{ gap: 6 }}><span className="small muted">Base URL</span><span className="mono">{apiBase()}</span><span className="small muted">Send the key in the <span className="mono">X-API-Key</span> header.</span></div>
         <div className="card col" style={{ gap: 6 }}><span className="small muted">Documentation</span><b>OpenAPI reference and examples</b><span className="small muted">Served by the backend at /docs.</span></div>
       </div>
-      <CreateKey open={creating} onClose={() => setCreating(false)} />
+      <CreateKey open={creating} onClose={() => { setCreating(false); reload() }} />
       <Modal open={!!revoke} onClose={() => setRevoke(null)} width={440}>
         <div className="col" style={{ gap: 14 }}>
           <span className="avatar lg" style={{ background: 'var(--bad-tint)', color: 'var(--bad)' }}><AlertTriangle size={20} /></span>
@@ -49,7 +60,10 @@ export function ApiKeys() {
           <p className="muted">Any server using <span className="mono">{revoke?.prefix}…</span> stops working immediately. This cannot be undone.</p>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary" onClick={() => setRevoke(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={async () => { await revokeApiKey(revoke!.id); toast(`“${revoke!.name}” revoked`); setRevoke(null) }}>Revoke key</button>
+            <button className="btn btn-danger" onClick={async () => {
+              try { await revokeApiKey(revoke!.id); toast(`“${revoke!.name}” revoked`) } catch (e) { toast((e as Error).message, 'bad') }
+              setRevoke(null); reload()
+            }}>Revoke key</button>
           </div>
         </div>
       </Modal>
@@ -60,13 +74,14 @@ export function ApiKeys() {
 function CreateKey({ open, onClose }: { open: boolean; onClose: () => void }) {
   const toast = useToast()
   const [name, setName] = useState('')
+  const [days, setDays] = useState(90)
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const close = () => { setName(''); setCreated(null); setError(''); onClose() }
   const create = async () => {
     setBusy(true); setError('')
-    try { setCreated(await createApiKey(name)) } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+    try { setCreated(await createApiKey(name, days)) } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <Modal open={open} onClose={created ? () => {} : close}>
@@ -76,6 +91,7 @@ function CreateKey({ open, onClose }: { open: boolean; onClose: () => void }) {
           <>
             <h3 style={{ fontSize: 20 }}>Create an API key</h3>
             <div className="field"><label>Name</label><input className="input" autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Production server" onKeyDown={e => e.key === 'Enter' && create()} /><span className="hint">So you can tell keys apart later.</span></div>
+            <div className="field"><label>Expires after</label><select className="select" value={days} onChange={e => setDays(Number(e.target.value))}>{[30, 90, 180, 365].map(d => <option key={d} value={d}>{d} days</option>)}</select><span className="hint">Keys always expire, so old ones do not keep working forever.</span></div>
             {error && <div className="error-text">{error}</div>}
             <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn btn-secondary" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={create} disabled={busy}>{busy ? <Spinner sm /> : 'Create key'}</button></div>
           </>

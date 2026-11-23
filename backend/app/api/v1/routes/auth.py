@@ -164,7 +164,7 @@ def forgot_password(
             )
         )
         db.commit()
-        email_service.send_password_reset(account.email, token)
+        email_service.send_password_reset(account.email, token, account.first_name)
         if email_service.reveal_token_to_caller():
             revealed = token
 

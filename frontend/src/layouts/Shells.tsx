@@ -58,10 +58,6 @@ export function ClientShell() {
         <NavItem to="/app/api-keys" icon={<KeyRound size={18} />}>API keys</NavItem>
         <NavItem to="/app/settings" icon={<Settings2 size={18} />}>Settings</NavItem>
         <div className="foot">
-          <div className="banner info" style={{ flexDirection: 'column', gap: 4 }}>
-            <b style={{ fontSize: 13 }}>Partly connected</b>
-            <span className="small">Your account is on the server. Verifications and keys are still kept in this browser.</span>
-          </div>
           <div className="account">
             <Avatar name={s.name} />
             <div className="grow">

@@ -18,9 +18,9 @@ cd zener-id
 
 ## Run the frontend
 
-Needs **Node.js 18+**, and the backend running on port 8000 (below): sign-in,
-registration and password reset go to it. Everything else still runs on an
-in-browser mock that starts empty.
+Needs **Node.js 18+**, and the backend running on port 8000 (below): accounts,
+API keys and verifications are stored there. The admin console's data still
+runs on an in-browser mock that starts empty.
 
 ```bash
 cd frontend
@@ -56,10 +56,13 @@ uvicorn app.main:app --reload --port 8000
 
 - Download the face models into `backend/models/` first (commands in `backend/README.md`, about 290 MB).
 - On Windows set `PYTHONUTF8=1` before starting, and add Tesseract (`C:\Program Files\Tesseract-OCR`) to `PATH`.
+- Add `VERIFY_BASE_URL=http://localhost:5173` to `backend/.env` so verification links open the frontend's applicant flow.
 - API docs: http://localhost:8000/docs
 - Add `DASHBOARD_URL=http://localhost:5173` to `backend/.env` so password-reset links open the frontend. With email off (the default in development) the reset link is shown on the sign-in page instead of being emailed.
 
 ## Status
 
-Connected: sign-in, registration, forgot / reset password, admin console sign-in.
-Not yet: verifications, API keys, the applicant flow and the admin data still run on the in-browser mock (`frontend/README.md`).
+Connected: sign-in, registration, forgot / reset password (HTML email through SMTP), admin console sign-in,
+and the client dashboard (API keys, creating, listing and reading verifications, the PDF report, dashboard numbers).
+and the applicant flow on the verification link (document photos, then a guided face check with live feedback).
+Not yet: the admin console's data, which still runs on the in-browser mock (`frontend/README.md`).

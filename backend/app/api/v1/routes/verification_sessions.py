@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import Caller, account_from_api_key, current_caller
+from app.api.deps import Caller, current_caller, current_client
 from app.api.v1.routes import console_verifications as views
 from app.core import ratelimit, urls
 from app.core.config import settings
@@ -100,10 +100,13 @@ def _as_response(verification: Verification) -> VerificationResponse:
 def create_verification(
     body: CreateVerificationRequest,
     request: Request,
-    account: Account = Depends(account_from_api_key),
+    account: Account = Depends(current_client),
     db: Session = Depends(get_session),
 ) -> VerificationResponse:
     """Open a verification and get back the link to send the person.
+
+    Called with the client's API key, or from the client dashboard with its
+    sign-in token. Staff cannot open verifications on a client's behalf.
 
     The record exists from this moment, before they have done anything, so every
     step, image and callback that follows has something to hang off.
@@ -275,6 +278,7 @@ def read_verification(
         files=full.files,
         evidence=full.evidence,
         reviews=reviews,
+        claimed=verification.claimed or {},
     )
 
 

@@ -10,13 +10,28 @@ call the backend directly instead of the Next.js `/api/auth/*` routes. Visual st
 (`zenerid_brand.pdf`): official logo and favicons in `public/`, Deep Pine / Paper /
 Evergreen / Mint palette, Manrope ExtraBold headings and Inter body text.
 
-The parts not connected yet use an in-browser mock
-(`src/api/mock.ts`) stored in `localStorage`, so the UI can be checked first.
 **Sign-in, registration and password reset use the backend** (`src/api/auth.ts`,
 `POST /v1/auth/*` and `/v1/console/auth/login`). The token is kept in
 `localStorage` and checked with `GET /v1/auth/me` when the dashboard opens.
-Everything else still uses the mock, which **starts empty**: a registered account
-gets an empty workspace the first time it opens the dashboard.
+
+**The client dashboard uses the backend too** (`src/api/client.ts`): API keys
+(`/v1/api-keys`), creating, listing and reading verifications (`/v1/verifications`,
+with evidence images and the PDF report), and the dashboard numbers
+(`/v1/metrics/overview`).
+
+**The applicant flow uses the backend** (`src/api/applicant.ts`): the link opens
+`/verify/<token>` here (backend `VERIFY_BASE_URL=http://localhost:5173`), and the
+page follows the backend's order: consent → document photos
+(`POST /v1/sessions/{token}/document`) → a guided face check → result. The face
+check sends camera frames to `POST /v1/face/frame` for live guidance (light,
+framing, which way the head points), learns the resting pose, waits for each
+movement (up, down, left, right), takes a still facing the camera, and sends it all
+with a short clip to `POST /v1/sessions/{token}/face`. Retakes and the attempt
+limit come from the backend. The QR code on the link is drawn by the backend and
+reached through the dev server, so it opens this app.
+
+Still on the in-browser mock (`src/api/mock.ts`, starts empty): the admin
+console's data.
 
 ## Run it
 
@@ -37,32 +52,33 @@ camera there.
 | New client | `/signup` | two steps: name, email, password (12+ characters); country, phone, date of birth |
 | Client | `/login` | the email and password you registered with; **Forgot password?** → `/reset-password?token=…` |
 | Staff / reviewer | `/login` (same page) → `/admin` | a backend account with a console role (`python -m app.scripts.console_admin create`) |
-| Applicant | `/v/<token>` | the link shown after creating a verification |
+| Applicant | `/verify/<token>` | the link shown after creating a verification (needs the camera: use `localhost` or https) |
 
-## Try the whole loop
+## Try it
 
-1. Register at `/signup` (you are signed in straight away) → **New verification** → fill in the applicant → **Create**. The applicant flow follows Shufti's hosted layout and order: consent → face → document (country, type, photo or upload, front and back, "Check your photo") → verification → completed.
-2. Click **Open** on the link (new tab) to act as the applicant.
-3. Use the **Sandbox** box (bottom-left) to choose the outcome: pass, face mismatch,
-   borderline (goes to review), liveness fail, name / DOB mismatch, expired, under 18,
-   or "first photo blurry".
-4. Capture the document with the camera, upload a photo, or use the sample buttons.
-   The blur / light / size check runs for real in the browser (Laplacian variance).
-5. Do the face check (look straight, left, right). Without a camera there is a
-   "continue without a camera (mock only)" button.
-6. Back in the dashboard the verification shows its decision and reasons.
-7. Borderline cases appear in **/admin/review**: approve, decline or ask to retry, with a note.
-
-Delete the verifications and keys kept in this browser from **Settings → Data → Clear local data** (accounts are on the server and stay).
+1. Register at `/signup` (you are signed in straight away).
+2. **New verification** → fill in the applicant → **Create**. You get the link, a QR code
+   to scan with a phone, and a button that writes the email in your own mail app.
+3. Open the link (new tab, or scan the QR with a phone on the same network through a
+   tunnel) and complete the check: photograph the document, then the guided face check.
+   Use a real ID: the backend reads it (OCR, MRZ) and compares the face with its photo.
+4. The verification's page refreshes by itself while the applicant is at it, then shows
+   the decision, each check, what was read from the document and the captured files.
+   **Download report** gives the backend's PDF.
+5. **API keys**: create a key (shown once), call the API with it in the `X-API-Key`
+   header, revoke it.
 
 ## Structure
 
 ```
 src/
   api/types.ts      shapes mirroring kyc-backend schemas (statuses, checks, session)
+  api/http.ts       the request helper and how backend errors read
   api/auth.ts       sign-in, register, forgot / reset password, staff sign-in (backend)
+  api/client.ts     client dashboard: API keys, verifications, report, metrics (backend)
   api/session.ts    the signed-in token for client and staff, in localStorage
-  api/mock.ts       mock for the rest: store (starts empty), decision engine, latency
+  api/applicant.ts  the applicant's flow on the link: session, document, face (backend)
+  api/mock.ts       mock for the admin console's data (starts empty)
   api/index.ts      single import point
   lib/quality.ts    in-browser image quality check (blur, light, size)
   lib/format.ts     labels, result words, reason-code text
@@ -73,17 +89,9 @@ src/
   pages/admin/      staff login, overview, review queue, case review, verifications, clients
 ```
 
-## Connecting the backend later
+## Connecting the rest
 
-The status vocabulary already matches the backend (`pending`, `in_progress`, `passed`,
-`failed`, `needs_review`, `expired`; checks `pass` / `fail` / `review`). To connect:
-
-Auth is done (`src/api/auth.ts`; the `/v1` dev proxy is in `vite.config.ts`). For
-the rest, move each mock function to an HTTP call with the same name, sending
-`Authorization: Bearer <token>` from `currentSession(...)`
-(e.g. `POST /v1/verifications`, `GET /v1/verifications/{reference}`,
-`GET /v1/sessions/{token}`, `POST /v1/sessions/{token}/document`, `.../face`,
-`/v1/console/reviews/{id}/approve`).
-
-Mock-only pieces to replace then: the QR code (not scannable — the backend serves a
-real one), the PDF report button, and the sandbox outcome panel.
+Done: auth (`src/api/auth.ts`), the client dashboard (`src/api/client.ts`) and the
+applicant flow (`src/api/applicant.ts`); the dev proxy is in `vite.config.ts`. Next:
+the admin console: `/v1/console/metrics/overview`, `/v1/console/verifications`,
+`/v1/console/verifications/{id}/approve|decline|redo`, `/v1/console/clients`.

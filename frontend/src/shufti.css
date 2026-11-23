@@ -11,14 +11,14 @@
 }
 .sf-head { height: 61px; background: #f3f7f2; display: flex; align-items: center; padding: 0 28px; position: relative; flex: none; }
 .sf-steps { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; }
-.sf-step { position: relative; width: 30px; height: 30px; display: grid; place-items: center; }
-.sf-step svg { width: 21px; height: 21px; }
-.sf-step.current { border: 1.5px solid #0f5246; border-radius: 50%; color: #0f5246; background: #fff; }
-.sf-step.upcoming { color: #5f6670; }
-.sf-step.done { color: #3d4249; }
-.sf-step .badge { position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; border-radius: 50%; background: #2fe0a8; color: #06302b; display: grid; place-items: center; border: 1.5px solid #f3f7f2; }
-.sf-step .badge svg { width: 9px; height: 9px; }
-.sf-line { width: 14px; height: 1.5px; background: #2fe0a8; margin: 0 2px; }
+.sf-step { position: relative; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid #c9ced6; background: #fff; color: #8a929c; }
+.sf-step svg { width: 17px; height: 17px; }
+.sf-step.current { border-color: #0f5246; color: #0f5246; box-shadow: 0 0 0 3px rgba(47, 224, 168, .25); }
+.sf-step.done { border-color: #0f5246; color: #0f5246; }
+/* The tick on top of a finished step: a solid badge on the top-right of its circle. */
+.sf-step .badge { position: absolute; top: -6px; right: -6px; width: 17px; height: 17px; border-radius: 50%; background: #0f5246; color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2px #f3f7f2; z-index: 1; }
+.sf-step .badge svg { width: 10px; height: 10px; }
+.sf-line { width: 16px; height: 2px; border-radius: 1px; background: #0f5246; margin: 0 4px; }
 .sf-line.todo { background: #c9ced6; }
 .sf-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .sf-phone { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #0f5246; background: #fff; display: grid; place-items: center; color: #0f5246; cursor: pointer; padding: 0; }
@@ -74,7 +74,10 @@
 .sf-cam .msg { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa4b5; text-align: center; padding: 24px; font-size: 14px; }
 .sf-cam .prompt { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(0, 0, 0, .65); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
 .sf-preview { margin-top: 16px; height: 300px; border-radius: 14px; background: #f3f7f2; display: grid; place-items: center; overflow: hidden; flex: none; }
-.sf-preview img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+/* The whole photo, scaled to fit: a grid item's percentage max-height does not
+   resolve, so a tall phone photo used to show only its top strip. */
+.sf-preview { position: relative; }
+.sf-preview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 
 .sf-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
 .sf-tip { border-radius: 30px; background: #f3f7f2; padding: 8px 14px 8px 8px; display: flex; gap: 10px; align-items: center; font-size: 13.5px; color: #3d4249; min-height: 60px; }
@@ -94,3 +97,18 @@
 .sf-check input { width: 17px; height: 17px; margin-top: 2px; accent-color: #0f5246; flex: none; }
 .sf-modal-qr { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
 @media (max-width: 760px) { .sf-docs, .sf-tips { grid-template-columns: 1fr; } .sf-card { border-radius: 0; } }
+/* Narrow screens: the stepper leaves the centre and sits at the start of the header,
+   so it never slides under the phone, language and help buttons. */
+@media (max-width: 760px) {
+  .sf-head { padding: 0 16px; gap: 10px; }
+  .sf-steps { position: static; transform: none; flex: none; }
+  .sf-step { width: 28px; height: 28px; }
+  .sf-step svg { width: 15px; height: 15px; }
+  .sf-line { width: 8px; margin: 0 2px; }
+  .sf-tools { gap: 6px; }
+}
+@media (max-width: 420px) {
+  .sf-head { padding: 0 12px; }
+  .sf-line { width: 4px; margin: 0 1px; }
+  .sf-lang { padding: 0 6px; gap: 4px; }
+}

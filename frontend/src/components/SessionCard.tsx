@@ -18,7 +18,7 @@ export function SessionCard({ v }: { v: Verification }) {
         <div className="sc-row"><div className="what"><b>No checks yet</b><span>{v.status === 'pending' ? 'The applicant has not opened the link.' : v.status === 'expired' ? 'The link expired before the applicant finished.' : 'The applicant is part-way through the flow.'}</span></div></div>
       )}
       {v.checks.map(c => <CheckRow key={c.name} c={c} />)}
-      {v.checks.length > 0 && (
+      {v.liveness_attempts > 0 && (
         <div className="sc-row">
           <div className="ic"><Fingerprint size={17} /></div>
           <div className="what"><b>Liveness attempts</b><span>Applicants get up to 3 tries</span></div>
@@ -30,7 +30,7 @@ export function SessionCard({ v }: { v: Verification }) {
 }
 
 function CheckRow({ c }: { c: Check }) {
-  const info = checkInfo[c.name]
+  const info = checkInfo[c.name as keyof typeof checkInfo] ?? { label: c.label ?? c.name, ok: 'Pass', icon: 'doc' }
   const Icon = icons[info.icon as keyof typeof icons]
   const r = resultWord(c.name, c.status)
   const showScore = c.score !== undefined && c.threshold !== undefined
@@ -83,11 +83,14 @@ export function ExtractedCard({ v }: { v: Verification }) {
         <>
           <Kv k="Document" v={`${docLabel[d.document_type]} · ${d.nationality}`} />
           <Kv k="Number" v={d.number} mono />
-          <Kv k="Surname" v={d.surname} />
-          <Kv k="Given names" v={d.given_names} />
+          {d.full_name !== undefined ? <Kv k="Name" v={d.full_name} /> : <>
+            <Kv k="Surname" v={d.surname ?? '—'} />
+            <Kv k="Given names" v={d.given_names ?? '—'} />
+          </>}
           <Kv k="Date of birth" v={fmtDate(d.date_of_birth)} />
           <Kv k="Expiry" v={fmtDate(d.expiry_date)} />
-          <Kv k="MRZ check digits" v={d.mrz_valid ? 'Valid' : 'Invalid'} tone={d.mrz_valid ? 'var(--ok)' : 'var(--bad)'} />
+          {d.mrz_valid !== undefined && <Kv k="MRZ check digits" v={d.mrz_valid ? 'Valid' : 'Invalid'} tone={d.mrz_valid ? 'var(--ok)' : 'var(--bad)'} />}
+          {d.decision && <Kv k="Document check" v={d.decision === 'pass' ? 'Passed' : d.decision === 'fail' ? 'Failed' : d.decision === 'review' ? 'Needs review' : d.decision} tone={d.decision === 'pass' ? 'var(--ok)' : d.decision === 'fail' ? 'var(--bad)' : undefined} />}
         </>
       )}
     </div>
@@ -100,10 +103,10 @@ export function ClaimedCard({ v }: { v: Verification }) {
       <div className="card-head"><span className="card-title">Submitted details</span></div>
       <Kv k="First name" v={v.applicant.first_name} />
       <Kv k="Last name" v={v.applicant.last_name} />
-      <Kv k="Date of birth" v={fmtDate(v.applicant.date_of_birth)} />
+      <Kv k="Date of birth" v={fmtDate(v.applicant.date_of_birth || undefined)} />
       {v.applicant.email && <Kv k="Email" v={v.applicant.email} />}
       <Kv k="Created" v={dateTime(v.created_at)} />
-      <Kv k="Link expires" v={dateTime(v.expires_at)} />
+      <Kv k="Link expires" v={dateTime(v.expires_at || undefined)} />
     </div>
   )
 }

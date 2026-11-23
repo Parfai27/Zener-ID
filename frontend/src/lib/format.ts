@@ -18,11 +18,11 @@ export const checkInfo: Record<CheckName, { label: string; ok: string; icon: str
   face_match: { label: 'Face match', ok: 'Match', icon: 'face' },
 }
 
-export function resultWord(name: CheckName, s: CheckStatus): { word: string; tone: 'ok' | 'bad' | 'warn' | 'muted' } {
-  if (s === 'pass') return { word: checkInfo[name].ok, tone: 'ok' }
-  if (s === 'fail') return { word: name === 'liveness' ? 'Fail' : name === 'document' ? 'Rejected' : 'Mismatch', tone: 'bad' }
+export function resultWord(name: CheckName | string, s: CheckStatus): { word: string; tone: 'ok' | 'bad' | 'warn' | 'muted' } {
+  if (s === 'pass') return { word: checkInfo[name as CheckName]?.ok ?? 'Pass', tone: 'ok' }
+  if (s === 'fail') return { word: name === 'liveness' ? 'Fail' : name === 'document' ? 'Rejected' : name in checkInfo ? 'Mismatch' : 'Fail', tone: 'bad' }
   if (s === 'review') return { word: 'Review', tone: 'warn' }
-  return { word: 'Not run', tone: 'muted' }
+  return { word: s === 'pending' ? 'Waiting' : 'Not run', tone: 'muted' }
 }
 
 export const reasonText: Record<string, string> = {
@@ -38,7 +38,7 @@ export const reasonText: Record<string, string> = {
 
 export const docLabel: Record<DocumentType, string> = { passport: 'Passport', id_card: 'National ID card', driving_license: 'Driving licence' }
 
-export function fullName(a: { first_name: string; last_name: string }) { return `${a.first_name} ${a.last_name}` }
+export function fullName(a: { first_name: string; last_name: string }) { return `${a.first_name} ${a.last_name}`.trim() }
 export function initials(s: string) { return s.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() }
 
 export function timeAgo(d?: string) {

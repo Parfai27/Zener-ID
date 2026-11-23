@@ -12,7 +12,10 @@ export type DocumentType = 'passport' | 'id_card' | 'driving_license'
 export type CheckName = 'document' | 'name' | 'date_of_birth' | 'liveness' | 'face_match'
 
 export interface Check {
-  name: CheckName
+  /** One of the five familiar checks, or another step (address, aml...). */
+  name: CheckName | string
+  /** Shown instead of the name, for a step that is not one of the five. */
+  label?: string
   status: CheckStatus
   /** Reason codes, e.g. FACE_MISMATCH, DOCUMENT_EXPIRED. */
   reasons: string[]
@@ -33,13 +36,19 @@ export interface Applicant {
 
 export interface ExtractedDocument {
   document_type: DocumentType
+  /** The backend gives only the last four characters, e.g. "•••• 4821". */
   number: string
   nationality: string
-  surname: string
-  given_names: string
+  /** The backend reads one full name; the mock reads surname and given names. */
+  full_name?: string
+  surname?: string
+  given_names?: string
+  issuing_country?: string
   date_of_birth: string
   expiry_date: string
-  mrz_valid: boolean
+  mrz_valid?: boolean
+  /** The document step's own decision (pass, fail, review). */
+  decision?: string
 }
 
 export interface EvidenceFile {
@@ -90,13 +99,15 @@ export interface CreateVerificationRequest {
   document_types?: DocumentType[]
 }
 
-/** SessionResponse — what the applicant's browser is allowed to see. */
+/** SessionResponse: what the applicant's browser is allowed to see. Deliberately
+ *  thin (no client name, no applicant name): anyone holding the link sees it. */
 export interface SessionView {
   reference: string
   status: VerificationStatus
-  client_name: string
-  applicant_first_name: string
-  next_step: 'consent' | 'face' | 'document' | 'verify' | 'done'
+  services: string[]
+  /** 'other' is a step this page does not handle (address, questionnaire). */
+  next_step: 'document' | 'face' | 'done' | 'other'
+  other_step?: string
   completed_steps: string[]
   expired: boolean
   expires_at: string
@@ -125,6 +136,9 @@ export interface ApiKey {
   created_at: string
   last_used_at?: string
   revoked: boolean
+  expires_at?: string
+  /** active, expiring, suspended, expired or revoked. */
+  state?: string
 }
 
 export interface CreatedApiKey extends ApiKey {

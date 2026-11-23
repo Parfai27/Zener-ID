@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Copy, ExternalLink, Mail, Send } from 'lucide-react'
-import { createVerification, fmtDate, resendLink } from '../../api'
+import { ArrowLeft, Check, Copy, ExternalLink, Mail } from 'lucide-react'
+import { createVerification, fmtDate } from '../../api'
 import type { Verification } from '../../api/types'
-import { Qr, Spinner, StatusPill, copyText, useToast } from '../../components/ui'
+import { Spinner, StatusPill, copyText, useToast } from '../../components/ui'
 import { fullName } from '../../lib/format'
 
 export function NewVerification() {
@@ -27,6 +27,7 @@ function Form({ onCreated }: { onCreated: (v: Verification) => void }) {
     if (!f.date_of_birth) errs.date_of_birth = 'Required'
     else if (new Date(f.date_of_birth) > new Date()) errs.date_of_birth = 'Cannot be in the future'
     if (f.email && !f.email.includes('@')) errs.email = 'Not a valid email'
+    if (f.reference.trim() && f.reference.trim().length < 6) errs.reference = 'At least 6 characters'
     setErrors(errs)
     if (Object.keys(errs).length) return
     setBusy(true); setError('')
@@ -64,7 +65,7 @@ function Form({ onCreated }: { onCreated: (v: Verification) => void }) {
                 {[1, 3, 7, 14, 30].map(d => <option key={d} value={d}>{d} day{d > 1 ? 's' : ''}</option>)}
               </select>
             </div>
-            {field('reference', 'Your reference (optional)', { placeholder: 'e.g. CUST-20931' }, 'Shown next to the result')}
+            {field('reference', 'Your reference (optional)', { placeholder: 'e.g. CUST-20931' }, 'At least 6 characters, unique in your account')}
           </div>
           <div className="field">
             <label>Checks</label>
@@ -86,6 +87,8 @@ function Form({ onCreated }: { onCreated: (v: Verification) => void }) {
           <div className="card" style={{ background: 'var(--ink)', color: '#fff', borderColor: 'var(--ink)' }}>
             <div style={{ fontWeight: 650, marginBottom: 10 }}>Or automate it with the API</div>
             <pre className="mono" style={{ margin: 0, color: '#a9c2ba', whiteSpace: 'pre-wrap' }}>{`POST /v1/verifications
+X-API-Key: <your key>
+
 {
   "applicant": {
     "first_name": "Jane",
@@ -104,11 +107,10 @@ function Created({ v, onAnother }: { v: Verification; onAnother: () => void }) {
   const nav = useNavigate()
   const toast = useToast()
   const [email, setEmail] = useState(v.applicant.email || '')
-  const [sending, setSending] = useState(false)
-  const send = async () => {
-    setSending(true)
-    try { await resendLink(v.reference, email); toast(`Link sent to ${email}`) } catch (e) { toast((e as Error).message, 'bad') } finally { setSending(false) }
-  }
+  // Opens the person's own mail app with the link written in: the backend does not send it.
+  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Verify your identity')}&body=${encodeURIComponent(
+    `Hello ${v.applicant.first_name},\n\nPlease complete a short identity check: photograph your ID and take a quick face check.\n\n${v.session_url}\n\nThe link works until ${fmtDate(v.expires_at)}.`,
+  )}`
   return (
     <div style={{ display: 'grid', placeItems: 'start center', paddingTop: 12 }}>
       <div className="card raised col" style={{ width: '100%', maxWidth: 720, gap: 22, padding: 32 }}>
@@ -127,19 +129,19 @@ function Created({ v, onAnother }: { v: Verification; onAnother: () => void }) {
           <span className="hint">Tip: open the link in a new tab to act as the applicant, then come back here to see the result.</span>
         </div>
         <div className="row" style={{ background: 'var(--canvas)', borderRadius: 14, padding: 16, gap: 20 }}>
-          <Qr value={v.session_url} size={112} />
+          <img src={`${v.session_url}/qr.svg`} width={112} height={112} alt="QR code for the verification link" style={{ background: '#fff', borderRadius: 8, padding: 4, flex: 'none' }} />
           <div className="col" style={{ gap: 4 }}>
             <b>Applicant next to you?</b>
             <span className="small muted">They can scan this code with their phone to start straight away.</span>
-            <span className="small muted">(Mock code. It becomes scannable when the backend is connected.)</span>
           </div>
         </div>
         <div className="field">
           <label>Send by email</label>
           <div className="row">
             <div className="input-icon grow"><Mail size={16} /><input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="applicant@example.com" /></div>
-            <button className="btn btn-primary" onClick={send} disabled={sending || !email}>{sending ? <Spinner sm /> : <><Send size={16} /> Send</>}</button>
+            <a className={`btn btn-primary${email.includes('@') ? '' : ' disabled'}`} aria-disabled={!email.includes('@')} href={email.includes('@') ? mailto : undefined} onClick={() => email.includes('@') && toast('Your email app opened with the link written in')}><Mail size={16} /> Write email</a>
           </div>
+          <span className="hint">Opens your own email app with the message and link ready to send.</span>
         </div>
         <div className="row" style={{ justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: 18 }}>
           <button className="btn btn-ghost" onClick={onAnother}>Create another</button>

@@ -607,9 +607,12 @@ def submit_face(
         clip = video.file.read(face_rules.MAX_VIDEO_BYTES + 1)
         if len(clip) > face_rules.MAX_VIDEO_BYTES:
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "video is too large")
-        if video.content_type not in face_rules.ALLOWED_VIDEO_TYPES:
+        # Browsers label a recording with its codecs ("video/webm;codecs=vp8,opus"):
+        # the type is what comes before the parameters.
+        video_type = (video.content_type or "").split(";")[0].strip().lower()
+        if video_type not in face_rules.ALLOWED_VIDEO_TYPES:
             raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "video must be webm, mp4 or quicktime")
-        _keep_file(db, verification, step, FileKind.challenge_video, clip, video.content_type)
+        _keep_file(db, verification, step, FileKind.challenge_video, clip, video_type)
 
     duplicate, duplicate_score = (None, None)
     if captured is not None:

@@ -21,6 +21,11 @@ export default defineConfig({
   server: {
     port: 5173,
     // BACKEND_URL overrides where the API runs (default: uvicorn on port 8000).
-    proxy: { '/v1': { target: process.env.BACKEND_URL || 'http://localhost:8000', changeOrigin: true } },
+    proxy: {
+      '/v1': { target: process.env.BACKEND_URL || 'http://localhost:8000', changeOrigin: true },
+      // The link's QR code is drawn by the backend from the address it was asked
+      // on, so the Host header is kept: the code then opens this app, not the API.
+      '^/verify/[^/]+/qr\.svg$': { target: process.env.BACKEND_URL || 'http://localhost:8000', changeOrigin: false },
+    },
   },
 })

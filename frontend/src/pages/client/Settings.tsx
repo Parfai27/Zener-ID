@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Send, Trash2 } from 'lucide-react'
-import { clearAllData, currentSession } from '../../api'
+import { Send } from 'lucide-react'
+import { currentSession } from '../../api'
 import { Pill, useToast } from '../../components/ui'
 
 export function Settings() {
@@ -15,7 +15,7 @@ export function Settings() {
         <button className="btn btn-primary" onClick={() => toast('Settings saved (in this browser only)')}>Save changes</button>
       </div>
       <div className="tabs">
-        {[['defaults', 'Verification defaults'], ['webhooks', 'Webhooks'], ['team', 'Team'], ['data', 'Data']].map(([k, l]) => (
+        {[['defaults', 'Verification defaults'], ['webhooks', 'Webhooks'], ['team', 'Team']].map(([k, l]) => (
           <button key={k} className={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -37,17 +37,6 @@ export function Settings() {
       {tab === 'team' && (
         <div className="card" style={{ maxWidth: 760 }}>
           <div className="kv"><span className="k" style={{ color: 'var(--ink)', fontWeight: 600 }}>{s.name}<div className="small muted" style={{ fontWeight: 400 }}>{s.email}</div></span><span className="v muted">Owner</span></div>
-        </div>
-      )}
-      {tab === 'data' && (
-        <div className="card col" style={{ gap: 12, maxWidth: 760 }}>
-          <span className="card-title">Clear local data</span>
-          <p className="muted small">Your account is on the server. Verifications and API keys are not connected yet and are kept in this browser’s storage; clearing deletes them for every account in this browser.</p>
-          <div><button className="btn btn-secondary" onClick={() => {
-            if (!window.confirm('Delete every verification and API key kept in this browser? This cannot be undone.')) return
-            clearAllData()
-            toast('Local data cleared')
-          }}><Trash2 size={16} /> Clear local data</button></div>
         </div>
       )}
     </>

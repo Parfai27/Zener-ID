@@ -1,16 +1,16 @@
-// Applicant verification, laid out exactly like Shufti's hosted flow:
-// one 750px card (header stepper · body · "Powered by" footer), and the same
-// step order: consent → face → document → verification → result.
+// Applicant verification, laid out like Shufti's hosted flow: one 750px card
+// (header stepper · body · "Powered by" footer). The order follows the backend:
+// consent → document → face → verification → result. The document comes first
+// because the face is compared with the photo printed on it.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, ArrowRight, Camera, Check, CheckCircle2, ChevronDown, Clock, EyeOff, FlaskConical, ImageUp, Languages, RefreshCw, ScanFace, Smartphone, Sun, X } from 'lucide-react'
-import { completeSession, getSession, startSession, submitDocument, submitFace } from '../../api'
-import type { DocumentType, QualityReport, SandboxOutcome, SessionView } from '../../api/types'
-import { Logo, Modal, Qr } from '../../components/ui'
-import { documentArt } from '../../lib/art'
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, Camera, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, EyeOff, IdCard, ImageUp, Languages, RefreshCw, ScanFace, Smartphone, Sun, X } from 'lucide-react'
+import { ApiError, getSession, probeFrame, sessionQr, submitDocument, submitFace, type FrameProbe } from '../../api'
+import type { DocumentType, QualityReport, SessionView } from '../../api/types'
+import { Logo, Modal } from '../../components/ui'
 import { assessQuality, loadImage, toJpeg } from '../../lib/quality'
 import { useCamera } from './useCamera'
-import { LANGS, LangCtx, initialLang, makeT, useLang, useT, type Lang } from './i18n'
+import { LANGS, LangCtx, initialLang, makeT, useLang, useT, type Dict, type Lang } from './i18n'
 
 // ---------------------------------------------------------------- data
 type Country = { name: string; docs: DocumentType[] }
@@ -29,30 +29,33 @@ const DOC: Record<DocumentType, { label: 'passport' | 'idCard' | 'license'; sub:
   id_card: { label: 'idCard', sub: 'frontBack', sides: 2 },
   driving_license: { label: 'license', sub: 'frontBack', sides: 2 },
 }
-const OUTCOMES: Array<[SandboxOutcome, string]> = [
-  ['auto', 'Pass (default)'], ['blurry_once', 'First document photo is blurry'], ['face_mismatch', 'Fail: face does not match'],
-  ['face_borderline', 'Needs review: borderline face score'], ['liveness_fail', 'Fail: liveness (photo/screen)'],
-  ['name_mismatch', 'Fail: name mismatch'], ['dob_mismatch', 'Fail: date of birth mismatch'],
-  ['expired_document', 'Fail: expired document'], ['underage', 'Fail: under 18'],
-]
-const MOVES = ['lookStraight', 'turnLeft', 'turnRight'] as const
+
+// Document photos keep enough detail for the backend's OCR and MRZ reading: a
+// licence often fills only part of a phone photo.
+const DOC_MAX_PX = 2000
 
 type Side = 'front' | 'back'
 type Screen =
-  | { s: 'loading' } | { s: 'invalid' } | { s: 'expired' } | { s: 'consent' }
-  | { s: 'face-intro' } | { s: 'face-capture' } | { s: 'face-review'; frames: string[] }
+  | { s: 'loading' } | { s: 'invalid' } | { s: 'expired' } | { s: 'consent' } | { s: 'other' } | { s: 'attempts' }
   | { s: 'doc-select' } | { s: 'doc-method'; side: Side } | { s: 'doc-capture'; side: Side }
   | { s: 'doc-review'; side: Side; url: string; quality: QualityReport; busy?: boolean }
-  | { s: 'verifying' } | { s: 'done' }
+  | { s: 'doc-failed'; reasons: string[]; error?: string }
+  | { s: 'face-intro' } | { s: 'face-capture' } | { s: 'face-failed'; error?: string }
+  | { s: 'verifying'; what: 'document' | 'face' } | { s: 'done' }
 
-/** Which header step is active: 0 face · 1 document · 2 verification · 3 result. */
+/** Which header step is active: 0 document · 1 face · 2 verification · 3 result. */
 function stepOf(sc: Screen): number {
-  if (sc.s.startsWith('face') || sc.s === 'consent') return 0
-  if (sc.s.startsWith('doc')) return 1
+  if (sc.s.startsWith('doc') || sc.s === 'consent') return 0
+  if (sc.s.startsWith('face')) return 1
   if (sc.s === 'verifying') return 2
-  if (sc.s === 'done') return 4
+  if (sc.s === 'done' || sc.s === 'attempts') return 4
   return -1
 }
+
+type DocShots = { document_type: DocumentType; front: string; back?: string }
+
+/** The backend's "no attempts left" refusal, so the page can say it in the person's language. */
+const outOfAttempts = (e: unknown) => e instanceof ApiError && e.status === 409 && /attempt/i.test(e.message)
 
 // ---------------------------------------------------------------- flow
 export function ApplicantFlow() {
@@ -61,39 +64,93 @@ export function ApplicantFlow() {
   const [sc, setSc] = useState<Screen>({ s: 'loading' })
   const [country, setCountry] = useState(COUNTRIES[0])
   const [doc, setDoc] = useState<DocumentType>('id_card')
-  const [shots, setShots] = useState<{ front?: string; back?: string; quality?: QualityReport }>({})
+  const [shots, setShots] = useState<{ front?: string; back?: string }>({})
   const [modal, setModal] = useState<'phone' | 'help' | null>(null)
   const [lang, setLangState] = useState<Lang>(initialLang)
   const setLang = (l: Lang) => { setLangState(l); try { sessionStorage.setItem('zid.lang', l) } catch { /* private mode */ } }
   useEffect(() => { document.documentElement.lang = LANGS.find(x => x[0] === lang)![2] }, [lang])
   const t = makeT(lang)
-  const [outcome, setOutcome] = useState<SandboxOutcome>(() => (sessionStorage.getItem('zid.outcome.' + token) as SandboxOutcome) || 'auto')
-  useEffect(() => { sessionStorage.setItem('zid.outcome.' + token, outcome) }, [outcome, token])
-
-  const verify = async () => {
-    setSc({ s: 'verifying' })
-    await completeSession(token, { outcome })
-    setSc({ s: 'done' })
-  }
 
   useEffect(() => {
     getSession(token).then(sv => {
       setSession(sv)
       if (sv.expired) return setSc({ s: 'expired' })
-      const map = { consent: 'consent', face: 'face-intro', document: 'doc-select', done: 'done' } as const
-      if (sv.next_step === 'verify') verify()
-      else setSc({ s: map[sv.next_step] })
+      if (sv.next_step === 'done') return setSc({ s: 'done' })
+      if (sv.next_step === 'other') return setSc({ s: 'other' })
+      if (sv.next_step === 'face') return setSc({ s: 'face-intro' })
+      // Nothing done yet: ask for consent first. Coming back part-way: carry on.
+      setSc(sv.completed_steps.length ? { s: 'doc-select' } : { s: 'consent' })
     }, () => setSc({ s: 'invalid' }))
-  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token])
 
-  const afterReview = async (side: Side, url: string, quality: QualityReport) => {
-    const next = { ...shots, [side]: url, quality: side === 'front' ? quality : shots.quality }
+  // The person goes through every step first (document photos, then the face
+  // check); nothing is shown as decided until the Verification step. The document
+  // is sent the moment its photos are taken, quietly, so the backend reads it
+  // (OCR, MRZ, the portrait: tens of seconds on a laptop) while the person does
+  // the face check; the Verification step then waits for that answer, sends the
+  // face, and shows the result. A rejected document sends them back to retake the
+  // document only: the face capture already taken is reused.
+  type DocAnswer = { ok: true; decision: string; reasons: string[] } | { ok: false; error: unknown }
+  const docJob = useRef<Promise<DocAnswer> | null>(null)
+  const startDocument = (shots: DocShots) => {
+    docJob.current = submitDocument(token, shots).then(
+      r => ({ ok: true as const, decision: r.decision, reasons: r.reasons }),
+      error => ({ ok: false as const, error }),
+    )
+  }
+  const [pendingDoc, setPendingDoc] = useState<DocShots | null>(null)
+  const [pendingFace, setPendingFace] = useState<FaceCaptureResult | null>(null)
+  const [docDone, setDocDone] = useState(false)
+  useEffect(() => { if (session?.completed_steps.includes('document')) setDocDone(true) }, [session])
+
+  const failure = (e: unknown, step: 'doc' | 'face'): Screen => {
+    if (outOfAttempts(e)) return { s: 'attempts' }
+    if (e instanceof ApiError && e.status === 410) return { s: 'expired' }
+    const error = e instanceof ApiError && e.status >= 400 && e.status < 500 ? e.message : t('netError')
+    return step === 'doc' ? { s: 'doc-failed', reasons: [], error } : { s: 'face-failed', error }
+  }
+
+  const verify = async (docShots: DocShots | null, face: FaceCaptureResult) => {
+    let documentPassed = docDone
+    if (!documentPassed) {
+      if (!docShots) return setSc({ s: 'doc-select' })
+      setSc({ s: 'verifying', what: 'document' })
+      if (!docJob.current) startDocument(docShots)
+      const answer = await docJob.current!
+      docJob.current = null
+      setPendingDoc(null)
+      if (!answer.ok) return setSc(failure(answer.error, 'doc'))
+      if (answer.decision !== 'pass' && answer.decision !== 'review') return setSc({ s: 'doc-failed', reasons: answer.reasons })
+      documentPassed = true
+      setDocDone(true)
+    }
+    setSc({ s: 'verifying', what: 'face' })
+    try {
+      const r = await submitFace(token, face)
+      setPendingFace(null)
+      setSc(r.decision === 'pass' || r.decision === 'review' ? { s: 'done' } : { s: 'face-failed' })
+    } catch (e) {
+      setPendingFace(null)
+      setSc(failure(e, 'face'))
+    }
+  }
+
+  const afterReview = (side: Side, url: string) => {
+    const next = { ...shots, [side]: url }
     setShots(next)
     if (side === 'front' && DOC[doc].sides === 2) return setSc({ s: 'doc-method', side: 'back' })
-    setSc({ s: 'doc-review', side, url, quality, busy: true })
-    const r = await submitDocument(token, { document_type: doc, country: country.name, front: next.front!, back: next.back, quality: next.quality!, outcome })
-    if (r.status === 'retake') { setShots({}); setSc({ s: 'doc-review', side: 'front', url: next.front!, quality: r.quality }) }
-    else verify()
+    const docShots: DocShots = { document_type: doc, front: next.front!, back: next.back }
+    setPendingDoc(docShots)
+    setShots({})
+    startDocument(docShots)
+    // Retaking the document after a rejection: the face is already captured.
+    if (pendingFace) verify(docShots, pendingFace)
+    else setSc({ s: 'face-intro' })
+  }
+
+  const afterFace = (capture: FaceCaptureResult) => {
+    setPendingFace(capture)
+    verify(pendingDoc, capture)
   }
 
   return (
@@ -104,18 +161,13 @@ export function ApplicantFlow() {
         <div className="sf-body">
           {sc.s === 'loading' && <div className="sf-center"><div className="sf-ring" /><p className="sf-sub">{t('loading')}</p></div>}
           {sc.s === 'invalid' && <Notice icon={<X size={34} />} tone="bad" title={t('invalidTitle')} text={t('invalidText')} />}
-          {sc.s === 'expired' && <Notice icon={<Clock size={34} />} tone="muted" title={t('expiredTitle')} text={t('expiredText', { client: session?.client_name || '' })} />}
-          {sc.s === 'consent' && session && <Consent session={session} onStart={async () => { await startSession(token); setSc({ s: 'face-intro' }) }} />}
-
-          {sc.s === 'face-intro' && <FaceIntro onStart={() => setSc({ s: 'face-capture' })} />}
-          {sc.s === 'face-capture' && <FaceCapture onBack={() => setSc({ s: 'face-intro' })} onDone={frames => setSc({ s: 'face-review', frames })} />}
-          {sc.s === 'face-review' && (
-            <FaceReview frames={sc.frames} onRetake={() => setSc({ s: 'face-capture' })}
-              onContinue={async () => { await submitFace(token, { frames: sc.frames, outcome }); setSc({ s: 'doc-select' }) }} />
-          )}
+          {sc.s === 'expired' && <Notice icon={<Clock size={34} />} tone="muted" title={t('expiredTitle')} text={t('expiredText')} />}
+          {sc.s === 'other' && <Notice icon={<ArrowRight size={34} />} tone="muted" title={t('otherStepTitle')} text={t('otherStepText')} />}
+          {sc.s === 'attempts' && <Notice icon={<Clock size={34} />} tone="muted" title={t('verifyingTitle')} text={t('attemptsUsed')} />}
+          {sc.s === 'consent' && <Consent onStart={() => setSc({ s: 'doc-select' })} />}
 
           {sc.s === 'doc-select' && (
-            <DocSelect country={country} onCountry={c => setCountry(c)}
+            <DocSelect country={country} allowed={session?.document_types} onCountry={c => setCountry(c)}
               onPick={d => { setDoc(d); setShots({}); setSc({ s: 'doc-method', side: 'front' }) }} />
           )}
           {sc.s === 'doc-method' && (
@@ -128,39 +180,39 @@ export function ApplicantFlow() {
               onImage={(url, q) => setSc({ s: 'doc-review', side: sc.side, url, quality: q })} />
           )}
           {sc.s === 'doc-review' && (
-            <DocReview screen={sc} doc={doc} onRetake={() => setSc({ s: 'doc-method', side: sc.side })} onContinue={() => afterReview(sc.side, sc.url, sc.quality)} />
+            <DocReview screen={sc} doc={doc} onRetake={() => setSc({ s: 'doc-method', side: sc.side })} onContinue={() => afterReview(sc.side, sc.url)} />
+          )}
+          {sc.s === 'doc-failed' && (
+            <Failed title={t('docFailedTitle')} text={sc.error || t('docFailedText')} codes={sc.reasons} onRetry={() => setSc({ s: 'doc-method', side: 'front' })} />
+          )}
+
+          {sc.s === 'face-intro' && <FaceIntro onStart={() => setSc({ s: 'face-capture' })} />}
+          {sc.s === 'face-capture' && <FaceCapture token={token} onBack={() => setSc({ s: 'face-intro' })} onDone={afterFace} />}
+          {sc.s === 'face-failed' && (
+            <Failed title={t('faceFailedTitle')} text={sc.error || t('faceFailedText')} codes={[]} onRetry={() => setSc({ s: 'face-capture' })} />
           )}
 
           {sc.s === 'verifying' && (
-            <div className="sf-center"><div className="sf-ring" /><h2 className="sf-title">{t('verifyingTitle')}</h2><p className="sf-sub">{t('verifyingText')}</p></div>
+            <div className="sf-center"><div className="sf-ring" /><h2 className="sf-title">{t('verifyingTitle')}</h2><p className="sf-sub">{sc.what === 'document' ? t('checkingDocument') : t('checkingFace')}</p><p className="sf-sub" style={{ marginTop: 4 }}>{t('verifyingText')}</p></div>
           )}
           {sc.s === 'done' && (
             <div className="sf-center">
               <div className="sf-big-ic" style={{ background: '#e4f4ec', color: '#18794e' }}><Check size={40} strokeWidth={2.5} /></div>
               <h2 className="sf-title">{t('doneTitle')}</h2>
-              <p className="sf-sub" style={{ maxWidth: 520 }}>{t('doneText', { name: session?.applicant_first_name || '', client: session?.client_name || '' })}</p>
+              <p className="sf-sub" style={{ maxWidth: 520 }}>{t('doneText')}</p>
               {session && <p className="sf-sub" style={{ marginTop: 8 }}>{t('reference')}: <b style={{ color: '#1f2328', fontFamily: 'var(--mono)' }}>{session.reference}</b></p>}
             </div>
           )}
         </div>
-        <div className="sf-foot">© {t('poweredBy')} <span style={{ display: 'inline-flex', marginLeft: 4 }}><Logo size="sm" /></span></div>
+        <div className="sf-foot">© {t('poweredBy')} <span style={{ display: 'inline-flex', marginLeft: 4 }}><Logo size="xs" /></span></div>
       </div>
-
-      {!['loading', 'invalid', 'expired', 'done', 'verifying'].includes(sc.s) && (
-        <div className="sandbox">
-          <div className="row" style={{ gap: 6, fontWeight: 700 }}><FlaskConical size={14} /> Sandbox · test data only</div>
-          <div style={{ marginTop: 4 }}>Choose what the mock backend decides:</div>
-          <select value={outcome} onChange={e => setOutcome(e.target.value as SandboxOutcome)}>{OUTCOMES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-        </div>
-      )}
 
       <Modal open={modal === 'phone'} onClose={() => setModal(null)} width={420}>
         <div className="sf-modal-qr">
           <Smartphone size={26} color="#0f5246" />
           <h3 className="sf-title" style={{ fontSize: 19 }}>{t('phoneTitle')}</h3>
           <p className="sf-sub">{t('phoneText')}</p>
-          <Qr value={location.href} size={170} />
-          <p className="sf-sub" style={{ fontSize: 12 }}>{t('phoneMock')}</p>
+          <img src={sessionQr(token)} width={170} height={170} alt={t('phoneTitle')} style={{ background: '#fff' }} />
           <button className="sf-btn primary" onClick={() => setModal(null)}>{t('close')}</button>
         </div>
       </Modal>
@@ -178,21 +230,36 @@ export function ApplicantFlow() {
   )
 }
 
+function Failed({ title, text, codes, onRetry }: { title: string; text: string; codes: string[]; onRetry: () => void }) {
+  const t = useT()
+  return (
+    <div className="sf-center">
+      <div className="sf-big-ic" style={{ background: '#fdeaea', color: '#c62828' }}><AlertCircle size={36} /></div>
+      <h2 className="sf-title">{title}</h2>
+      <p className="sf-sub" style={{ maxWidth: 480 }}>{text}</p>
+      {codes.length > 0 && <p className="sf-sub" style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>{codes.join(' · ')}</p>}
+      <div className="sf-actions" style={{ justifyContent: 'center' }}><button className="sf-btn primary" onClick={onRetry}><RefreshCw size={16} /> {t('tryAgain')}</button></div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- header
 function Header({ step, onPhone, onHelp }: { step: number; onPhone: () => void; onHelp: () => void }) {
   const { lang, setLang, t } = useLang()
   const [open, setOpen] = useState(false)
-  const icons = [<FaceIcon key="f" />, <CardIcon key="c" />, <BadgeIcon key="b" />, <ListIcon key="l" />]
-  const names = [t('stepFace'), t('stepDocument'), t('stepVerification'), t('stepResult')]
+  // One family of line icons at one size, so every step reads the same; a finished
+  // step keeps its icon and gets a tick badge on top.
+  const icons = [IdCard, ScanFace, BadgeCheck, ClipboardCheck]
+  const names = [t('stepDocument'), t('stepFace'), t('stepVerification'), t('stepResult')]
   return (
     <div className="sf-head">
       <div className="sf-steps" aria-label="Progress">
-        {icons.map((ic, i) => (
+        {icons.map((Icon, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center' }}>
             {i > 0 && <span className={`sf-line${i <= step ? '' : ' todo'}`} />}
-            <span className={`sf-step ${i < step ? 'done' : i === step ? 'current' : 'upcoming'}`} title={names[i]} aria-current={i === step ? 'step' : undefined}>
-              {ic}
-              {i < step && <span className="badge"><Check strokeWidth={4} /></span>}
+            <span className={`sf-step ${i < step ? 'done' : i === step ? 'current' : 'upcoming'}`} title={names[i]} aria-label={`${names[i]}${i < step ? ' ✓' : ''}`} aria-current={i === step ? 'step' : undefined}>
+              <Icon strokeWidth={2} />
+              {i < step && <span className="badge" aria-hidden><Check strokeWidth={3.5} /></span>}
             </span>
           </span>
         ))}
@@ -218,26 +285,6 @@ function Header({ step, onPhone, onHelp }: { step: number; onPhone: () => void; 
 // Solid glyphs matching the Shufti header icons.
 const FaceIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden><path fill="currentColor" d="M12.6 2.2c-4.1 0-7.1 3-7.1 6.8 0 2 .7 3.5 1.9 4.7V21c0 .5.4.9.9.9h6.3c.5 0 .9-.4.9-.9v-2.1h1.9c1 0 1.7-.8 1.7-1.7v-2.4l1.5-.6c.4-.2.6-.6.4-1l-1.6-3.2c-.4-4.2-3-7.8-6.8-7.8z" /></svg>
-)
-const CardIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden>
-    <rect x="2.2" y="5" width="19.6" height="14" rx="2.4" fill="currentColor" />
-    <circle cx="8.3" cy="10.6" r="2" fill="#fff" /><path d="M5.3 15.6c.4-1.6 1.6-2.5 3-2.5s2.6.9 3 2.5z" fill="#fff" />
-    <path d="M13.8 10h4.6M13.8 13.6h4.6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
-)
-const BadgeIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden>
-    <path fill="currentColor" d="M12 2.2l2.3 1.7 2.9-.1.9 2.7 2.4 1.7-1 2.8 1 2.8-2.4 1.7-.9 2.7-2.9-.1L12 21.8l-2.3-1.7-2.9.1-.9-2.7-2.4-1.7 1-2.8-1-2.8 2.4-1.7.9-2.7 2.9.1z" />
-    <path d="M8.4 12.1l2.4 2.3 4.8-4.8" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-const ListIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden>
-    <rect x="2.8" y="3" width="18.4" height="18" rx="2.4" fill="currentColor" />
-    <path d="M6.4 8h5.4M6.4 12h5.4M6.4 16h3.4" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
-    <path d="M13.6 13.4l1.9 1.9 3.3-3.7" stroke="#fff" strokeWidth="1.9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
 )
 const DocIcon = ({ d }: { d: DocumentType }) =>
   d === 'passport' ? (
@@ -279,23 +326,22 @@ function Tip({ icon, title, children }: { icon: ReactNode; title: string; childr
   return <div className="sf-tip"><span className="ic">{icon}</span><div><b>{title}</b>{children}</div></div>
 }
 
-function Consent({ session, onStart }: { session: SessionView; onStart: () => Promise<void> }) {
+function Consent({ onStart }: { onStart: () => void }) {
   const t = useT()
   const [agree, setAgree] = useState(false)
-  const [busy, setBusy] = useState(false)
   return (
     <>
       <h1 className="sf-title">{t('consentTitle')}</h1>
-      <p className="sf-sub">{t('consentText', { client: session.client_name })}</p>
+      <p className="sf-sub">{t('consentText')}</p>
       <div className="sf-docs" style={{ marginTop: 22 }}>
-        <div className="sf-doc" style={{ cursor: 'default' }}><span className="ic"><FaceIcon /></span><div><b>{t('stepFace')}</b><span>{t('faceCardSub')}</span></div></div>
         <div className="sf-doc" style={{ cursor: 'default' }}><span className="ic"><DocIcon d="id_card" /></span><div><b>{t('stepDocument')}</b><span>{t('docCardSub')}</span></div></div>
+        <div className="sf-doc" style={{ cursor: 'default' }}><span className="ic"><FaceIcon /></span><div><b>{t('stepFace')}</b><span>{t('faceCardSub')}</span></div></div>
       </div>
       <label className="sf-check">
         <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} />
-        <span>{t('agree', { client: session.client_name })} <a href="#" onClick={e => e.preventDefault()}>{t('privacy')}</a> {t('and')} <a href="#" onClick={e => e.preventDefault()}>{t('terms')}</a>.</span>
+        <span>{t('agree')} <a href="#" onClick={e => e.preventDefault()}>{t('privacy')}</a> {t('and')} <a href="#" onClick={e => e.preventDefault()}>{t('terms')}</a>.</span>
       </label>
-      <div className="sf-actions"><button className="sf-btn primary" disabled={!agree || busy} onClick={async () => { setBusy(true); await onStart() }}>{t('getStarted')} <ArrowRight size={17} /></button></div>
+      <div className="sf-actions"><button className="sf-btn primary" disabled={!agree} onClick={onStart}>{t('getStarted')} <ArrowRight size={17} /></button></div>
     </>
   )
 }
@@ -317,68 +363,197 @@ function FaceIntro({ onStart }: { onStart: () => void }) {
   )
 }
 
-function FaceCapture({ onBack, onDone }: { onBack: () => void; onDone: (frames: string[]) => void }) {
+// ---------------------------------------------------------------- guided face capture
+// The same capture the backend's own page does (app/web/verify.html): frames go to
+// /v1/face/frame for live guidance, the resting pose is learned first, then each
+// movement is waited for until the server sees it, then a still facing the camera
+// is taken as the portrait identity is decided on. Frames are sent unmirrored.
+type Move = 'up' | 'down' | 'left' | 'right'
+const CHALLENGE = 'full'
+const MOVES: Move[] = ['up', 'down', 'left', 'right']
+const MOVE_KEY: Record<Move | 'centre', keyof Dict> = { up: 'moveUp', down: 'moveDown', left: 'moveLeft', right: 'moveRight', centre: 'moveCentre' }
+const HINT_KEY: Record<string, keyof Dict> = {
+  NO_FACE: 'hintNoFace', MULTIPLE_FACES: 'hintMultiple', MOVE_CLOSER: 'hintCloser', MOVE_BACK: 'hintBack',
+  OFF_CENTRE: 'hintCentre', TOO_DARK: 'hintDark', TOO_BRIGHT: 'hintBright', UNEVEN_LIGHTING: 'hintUneven', HOLD_STILL: 'hintSteady',
+}
+const READY_FRAMES = 3          // consecutive good frames before asking anyone to move
+const READY_TIMEOUT_MS = 12000  // then start anyway: guidance must never trap anyone
+const CALIBRATION_FRAMES = 4
+const STEP_TIMEOUT_MS = 25000
+const PORTRAIT_HOLD_FRAMES = 2
+const PORTRAIT_MAX_DEGREES = 8
+const PORTRAIT_ATTEMPTS = 6
+const CLIP_SECONDS = 3
+
+export interface FaceCaptureResult {
+  frames: Blob[]; portrait: Blob | null; video: Blob | null; challenge: string; steps: Array<{ index: number; step: string }>
+}
+
+function FaceCapture({ token, onBack, onDone }: { token: string; onBack: () => void; onDone: (r: FaceCaptureResult) => void }) {
   const t = useT()
   const cam = useCamera('user')
-  const [move, setMove] = useState(-1)
-  const frames = useRef<string[]>([])
-  useEffect(() => { cam.start() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  const run = () => {
-    frames.current = []
-    let i = 0
-    setMove(0)
-    const tick = () => {
-      const s = cam.snap(480, 0.75)
-      if (s) frames.current.push(s.url)
-      i++
-      if (i < MOVES.length) { setMove(i); setTimeout(tick, 1800) }
-      else { setMove(MOVES.length); setTimeout(() => { cam.stop(); onDone(frames.current) }, 500) }
-    }
-    setTimeout(tick, 1800)
+  const [phase, setPhase] = useState<'ready' | 'check' | 'centre' | Move | 'photo'>('ready')
+  const [done, setDone] = useState<Move[]>([])
+  const [hint, setHint] = useState('')
+  const [ok, setOk] = useState(false)
+  const [problem, setProblem] = useState('')
+  // Each run of the capture has a number; a run keeps going only while it is the
+  // latest one and the page is still open. Leaving the page or pressing Cancel
+  // bumps the number, so an old run stops at its next step. (Set again on every
+  // mount: React's development mode mounts twice.)
+  const mounted = useRef(true)
+  const runId = useRef(0)
+  const alive = (id: number) => mounted.current && runId.current === id
+
+  useEffect(() => {
+    mounted.current = true
+    cam.start()
+    return () => { mounted.current = false; runId.current++ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const grab = () => new Promise<Blob>((resolve, reject) => {
+    const v = cam.videoRef.current
+    if (!v || !v.videoWidth) return reject(new Error('no video'))
+    const size = Math.min(v.videoWidth, v.videoHeight)
+    const c = document.createElement('canvas')
+    c.width = 720; c.height = 720 // detail matters for the face match
+    c.getContext('2d')!.drawImage(v, (v.videoWidth - size) / 2, (v.videoHeight - size) / 2, size, size, 0, 0, 720, 720)
+    c.toBlob(b => (b ? resolve(b) : reject(new Error('no frame'))), 'image/jpeg', 0.95)
+  })
+
+  const show = (r: FrameProbe) => {
+    const code = r.hints[0]
+    setHint(code ? t(HINT_KEY[code] ?? 'hintCentre') : '')
+    setOk(r.usable)
   }
-  const running = move >= 0 && move < MOVES.length
-  const noCam = cam.state === 'denied' || cam.state === 'unavailable'
+
+  /** Keep sending frames until `accept` says this one will do, or time runs out. */
+  const waitFor = async (id: number, accept: (r: FrameProbe) => boolean, timeout: number, calibrate = false) => {
+    const deadline = Date.now() + timeout
+    while (alive(id) && Date.now() < deadline) {
+      const blob = await grab()
+      const r = await probeFrame(token, blob, calibrate)
+      if (!alive(id)) return null
+      show(r)
+      if (r.usable && accept(r)) return blob
+    }
+    return null
+  }
+
+  const cancel = () => { runId.current++; setPhase('ready'); setHint(''); setOk(false); setDone([]) }
+
+  const run = async () => {
+    const id = ++runId.current
+    setProblem(''); setDone([])
+    const kept: Blob[] = []
+    const steps: Array<{ index: number; step: string }> = []
+
+    // A few seconds of the challenge, kept as evidence of how the check went.
+    let clip: Blob | null = null
+    let recorder: MediaRecorder | null = null
+    const chunks: Blob[] = []
+    const stream = cam.videoRef.current?.srcObject as MediaStream | null
+    if (stream && typeof MediaRecorder !== 'undefined') {
+      try {
+        recorder = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : undefined })
+        recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
+        // The plain type, without the codecs Chrome adds ("video/webm;codecs=vp8").
+        recorder.onstop = () => { clip = new Blob(chunks, { type: (recorder?.mimeType || 'video/webm').split(';')[0] }) }
+        recorder.start()
+        window.setTimeout(() => { if (recorder?.state === 'recording') recorder.stop() }, CLIP_SECONDS * 1000)
+      } catch { recorder = null }
+    }
+    const stopClip = () => new Promise<Blob | null>(resolve => {
+      if (!recorder) return resolve(null)
+      if (recorder.state === 'inactive') return resolve(clip)
+      const prev = recorder.onstop
+      recorder.onstop = ev => { prev?.call(recorder!, ev); resolve(clip) }
+      recorder.stop()
+    })
+
+    try {
+      // 0. Light, sharpness and framing first, before asking anyone to move.
+      setPhase('check')
+      const deadline = Date.now() + READY_TIMEOUT_MS
+      let good = 0
+      while (alive(id) && Date.now() < deadline && good < READY_FRAMES) {
+        const r = await probeFrame(token, await grab())
+        if (!alive(id)) break
+        show(r)
+        good = r.usable ? good + 1 : 0
+      }
+
+      // 1. The resting pose, kept on the server against this link.
+      if (!alive(id)) return
+      setPhase('centre')
+      for (let i = 0; i < CALIBRATION_FRAMES; i++) {
+        const blob = await waitFor(id, () => true, 40000, true)
+        if (!blob) throw new Error(t('faceLost'))
+        kept.push(blob)
+      }
+
+      // 2. One movement at a time; each is waited for until the server sees it.
+      for (const move of MOVES) {
+        setPhase(move)
+        const blob = await waitFor(id, r => r.direction === move, STEP_TIMEOUT_MS)
+        if (!blob) throw new Error(t('faceMissed'))
+        // A second frame straight after: the server needs to see the movement held.
+        steps.push({ index: kept.length, step: move })
+        kept.push(blob, await grab())
+        setDone(d => [...d, move])
+      }
+
+      // 3. The portrait: square to the camera and held for a moment.
+      setPhase('photo')
+      let square = 0
+      let portrait: Blob | null = null
+      for (let i = 0; i < PORTRAIT_ATTEMPTS && square < PORTRAIT_HOLD_FRAMES; i++) {
+        const blob = await waitFor(id, r => r.direction === 'centre' && Math.abs(r.yaw ?? 99) <= PORTRAIT_MAX_DEGREES && Math.abs(r.pitch ?? 99) <= PORTRAIT_MAX_DEGREES, STEP_TIMEOUT_MS)
+        if (!blob) { square = 0; continue }
+        square += 1
+        kept.push(blob)
+        portrait = blob
+      }
+      if (square < PORTRAIT_HOLD_FRAMES) throw new Error(t('faceLost'))
+
+      const video = await stopClip()
+      cam.stop()
+      if (alive(id)) onDone({ frames: kept, portrait, video, challenge: CHALLENGE, steps })
+    } catch (e) {
+      await stopClip()
+      if (!alive(id)) return
+      setPhase('ready'); setHint(''); setOk(false)
+      setProblem(e instanceof ApiError ? t('netError') : (e as Error).message || t('faceLost'))
+    }
+  }
+
+  const running = phase !== 'ready'
+  const prompt = phase === 'check' ? t('moveCheck') : phase === 'photo' ? t('movePhoto') : phase === 'ready' ? '' : t(MOVE_KEY[phase])
+  const arrow = phase === 'up' ? <ArrowUp size={16} /> : phase === 'down' ? <ArrowDown size={16} /> : phase === 'left' ? <ArrowLeft size={16} /> : phase === 'right' ? <ArrowRight size={16} /> : <ScanFace size={16} />
   return (
     <>
       <h1 className="sf-title">{t('ovalTitle')}</h1>
-      <p className="sf-sub">{running ? t('ovalRunning') : t('ovalReady')}</p>
+      <p className="sf-sub">{running ? (hint || t('ovalRunning')) : t('ovalReady')}</p>
       <div className="sf-cam">
         <video ref={cam.videoRef} className="mirror" playsInline muted style={{ display: cam.state === 'live' ? 'block' : 'none' }} />
-        {cam.state === 'live' && <div className={`face-frame${move >= MOVES.length ? ' ok' : ''}`} />}
+        {cam.state === 'live' && <div className={`face-frame${running && ok ? ' ok' : ''}`} />}
         {cam.state !== 'live' && <div className="msg">{cam.state === 'starting' ? t('cameraStarting') : cam.error ? t(cam.error) : t('cameraOff')}</div>}
-        {running && <span className="prompt">{move === 1 ? <ArrowLeft size={16} /> : move === 2 ? <ArrowRight size={16} /> : <ScanFace size={16} />} {t(MOVES[move])}</span>}
+        {running && <span className="prompt">{arrow} {prompt}</span>}
       </div>
       <div className="sf-moves">
-        {MOVES.map((m, i) => <span key={m} className={`sf-move${move > i ? ' done' : move === i ? ' now' : ''}`}>{move > i && <Check size={14} />}{t(m)}</span>)}
+        {MOVES.map(m => <span key={m} className={`sf-move${done.includes(m) ? ' done' : phase === m ? ' now' : ''}`}>{done.includes(m) ? <Check size={14} /> : null}{m === 'up' ? <ArrowUp size={14} /> : m === 'down' ? <ArrowDown size={14} /> : m === 'left' ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}</span>)}
       </div>
+      {problem && <div className="sf-error" style={{ marginTop: 12 }}><AlertCircle size={17} /> {problem}</div>}
       <div className="sf-actions">
-        {!running && <button className="sf-btn ghost" onClick={onBack}>{t('back')}</button>}
-        {!running && move < MOVES.length && <button className="sf-btn primary" disabled={cam.state !== 'live'} onClick={run}>{t('start')}</button>}
-      </div>
-      {noCam && !running && <div className="sf-links"><button className="sf-link" onClick={() => { cam.stop(); onDone([]) }}>{t('noCamera')}</button></div>}
-    </>
-  )
-}
-
-function FaceReview({ frames, onRetake, onContinue }: { frames: string[]; onRetake: () => void; onContinue: () => Promise<void> }) {
-  const t = useT()
-  const [busy, setBusy] = useState(false)
-  return (
-    <>
-      <h1 className="sf-title">{t('faceReviewTitle')}</h1>
-      <p className="sf-sub">{t('faceReviewText')}</p>
-      <div className="sf-preview">
-        {frames[0] ? <img src={frames[0]} alt="Your selfie" /> : <div className="col" style={{ alignItems: 'center', color: '#5f6368' }}><ScanFace size={56} strokeWidth={1.2} /><span className="sf-sub">{t('noCameraSelfie')}</span></div>}
-      </div>
-      <div className="sf-actions">
-        <button className="sf-btn ghost" onClick={onRetake} disabled={busy}><RefreshCw size={16} /> {t('retake')}</button>
-        <button className="sf-btn primary" disabled={busy} onClick={async () => { setBusy(true); await onContinue() }}>{busy ? t('uploading') : t('continue')}</button>
+        {!running && <button className="sf-btn ghost" onClick={() => { cam.stop(); onBack() }}>{t('back')}</button>}
+        {!running && <button className="sf-btn primary" disabled={cam.state !== 'live'} onClick={run}>{problem ? t('tryAgain') : t('start')}</button>}
+        {running && <button className="sf-btn ghost" onClick={cancel}>{t('cancel')}</button>}
       </div>
     </>
   )
 }
 
-function DocSelect({ country, onCountry, onPick }: { country: Country; onCountry: (c: Country) => void; onPick: (d: DocumentType) => void }) {
+function DocSelect({ country, allowed, onCountry, onPick }: { country: Country; allowed?: DocumentType[]; onCountry: (c: Country) => void; onPick: (d: DocumentType) => void }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -414,7 +589,7 @@ function DocSelect({ country, onCountry, onPick }: { country: Country; onCountry
       <h2 className="sf-title">{t('docTypeTitle')}</h2>
       <p className="sf-sub">{t('docTypeSub')}</p>
       <div className="sf-docs">
-        {country.docs.map(d => (
+        {country.docs.filter(d => !allowed || allowed.includes(d)).map(d => (
           <button key={d} className="sf-doc" onClick={() => onPick(d)}>
             <span className="ic"><DocIcon d={d} /></span>
             <div><b>{t(DOC[d].label)}</b><span>{t(DOC[d].sub)}</span></div>
@@ -437,18 +612,8 @@ function DocMethod({ doc, side, onBack, onCamera, onImage }: {
     if (!f) return
     setBusy(true)
     const r = new FileReader()
-    r.onload = async () => { const url = String(r.result); const img = await loadImage(url); const q = await assessQuality(url, img.naturalWidth, img.naturalHeight); onImage(toJpeg(img, img.naturalWidth, img.naturalHeight, 960), q) }
+    r.onload = async () => { const url = String(r.result); const img = await loadImage(url); const q = await assessQuality(url, img.naturalWidth, img.naturalHeight); onImage(toJpeg(img, img.naturalWidth, img.naturalHeight, DOC_MAX_PX, 0.9), q) }
     r.readAsDataURL(f)
-  }
-  const sample = async (blurry: boolean) => {
-    setBusy(true)
-    const art = await loadImage(documentArt({ surname: 'SAMPLE', given: 'APPLICANT', dob: '1994-03-14', expiry: '2031-08-02', number: '1199480012345', title: t(DOC[doc].label).toUpperCase() + (side === 'back' ? ' (BACK)' : '') }))
-    const c = document.createElement('canvas'); c.width = 1260; c.height = 840
-    const ctx = c.getContext('2d')!
-    if (blurry) ctx.filter = 'blur(7px)'
-    ctx.drawImage(art, 0, 0, c.width, c.height)
-    const url = c.toDataURL('image/jpeg', 0.85)
-    onImage(url, await assessQuality(url, c.width, c.height))
   }
   return (
     <>
@@ -458,11 +623,7 @@ function DocMethod({ doc, side, onBack, onCamera, onImage }: {
         <button className="sf-doc" onClick={onCamera} disabled={busy}><span className="ic"><Camera size={20} /></span><div><b>{t('takePhoto')}</b><span>{t('takePhotoSub')}</span></div></button>
         <button className="sf-doc" onClick={() => file.current?.click()} disabled={busy}><span className="ic"><ImageUp size={20} /></span><div><b>{t('uploadDevice')}</b><span>{t('uploadDeviceSub')}</span></div></button>
       </div>
-      <input ref={file} type="file" accept="image/*" hidden onChange={e => fromFile(e.target.files?.[0])} />
-      <div className="sf-links" style={{ marginTop: 22 }}>
-        <button className="sf-link" disabled={busy} onClick={() => sample(false)}>{t('sampleDoc')}</button>
-        <button className="sf-link muted" disabled={busy} onClick={() => sample(true)}>{t('blurrySample')}</button>
-      </div>
+      <input ref={file} type="file" accept="image/jpeg,image/png" hidden onChange={e => fromFile(e.target.files?.[0])} />
       <div className="sf-actions"><button className="sf-btn ghost" onClick={onBack}>{t('back')}</button></div>
     </>
   )
@@ -480,7 +641,7 @@ function DocCapture({ doc, side, onBack, onImage }: { doc: DocumentType; side: S
     const q = await assessQuality(s.url, s.w, s.h)
     const img = await loadImage(s.url)
     cam.stop()
-    onImage(toJpeg(img, img.naturalWidth, img.naturalHeight, 960), q)
+    onImage(toJpeg(img, img.naturalWidth, img.naturalHeight, DOC_MAX_PX, 0.9), q)
   }
   return (
     <>

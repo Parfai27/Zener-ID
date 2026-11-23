@@ -25,7 +25,7 @@ export function Dashboard() {
             <Stat label="Verifications" value={data.total} note={`${data.pending} waiting for the applicant`} />
             <Stat label="Verified" value={data.passed} note={`${pct(data.passRate)} pass rate`} tone="var(--ok)" />
             <Stat label="Declined" value={data.failed} note={data.topReasons[0] ? `Top: ${data.topReasons[0][0]}` : 'No declines'} tone="var(--bad)" />
-            <Stat label="Average decision" value={data.avgSeconds ? `${data.avgSeconds.toFixed(1)} s` : '—'} note="Target: under 15 s" />
+            <Stat label="Median completion" value={data.avgSeconds ? (data.avgSeconds >= 120 ? `${(data.avgSeconds / 60).toFixed(1)} min` : `${data.avgSeconds.toFixed(0)} s`) : '—'} note="Link opened to decision, last 30 days" />
           </div>
           <div className="grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px' }}>
             <div className="card">

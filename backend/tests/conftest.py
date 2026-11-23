@@ -4,6 +4,16 @@ from app.core.config import settings
 
 
 @pytest.fixture(autouse=True)
+def _no_real_email_from_tests(monkeypatch):
+    """Settings come from the developer's .env, which may switch real sending on.
+    Tests never send mail: email is off unless a test turns it on with a fake SMTP."""
+    monkeypatch.setattr(settings, "EMAIL_ENABLED", False)
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    monkeypatch.setattr(settings, "SMTP_USER", "")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "")
+
+
+@pytest.fixture(autouse=True)
 def _legacy_endpoints_on_for_the_legacy_tests(monkeypatch):
     """The first-generation endpoints are off by default (they take no login).
 

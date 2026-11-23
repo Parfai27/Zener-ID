@@ -117,7 +117,8 @@ body {
   white-space: nowrap; transition: background .15s, border-color .15s, box-shadow .15s, transform .05s;
 }
 .btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled, .btn.disabled { opacity: .5; cursor: not-allowed; }
+.btn.disabled { pointer-events: none; }
 .btn-primary { background: var(--brand); color: var(--paper); }
 .btn-primary:hover:not(:disabled) { background: #0f4038; }
 .btn-accent { background: var(--accent); color: #fff; }

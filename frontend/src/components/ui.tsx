@@ -10,8 +10,9 @@ import { initials, statusInfo } from '../lib/format'
  * dark background", so it uses the light logo. Brand rules: never stack, never
  * recolour, at least 80px wide — the smallest size here is 16px tall ≈ 105px wide.
  */
-export function Logo({ dark = false, size = 'md' }: { dark?: boolean; size?: 'sm' | 'md' | 'lg' }) {
-  const h = size === 'lg' ? 30 : size === 'sm' ? 16 : 22
+export function Logo({ dark = false, size = 'md' }: { dark?: boolean; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
+  // xs is the brand's minimum: 80 px wide (the logo is 517 × 79).
+  const h = size === 'lg' ? 30 : size === 'sm' ? 16 : size === 'xs' ? 80 * 79 / 517 : 22
   return <img src={`/brand/zenerid-logo-${dark ? 'light' : 'dark'}.svg`} alt="Zener ID" height={h} style={{ height: h, width: 'auto', display: 'block', alignSelf: 'flex-start', flex: 'none' }} />
 }
 
