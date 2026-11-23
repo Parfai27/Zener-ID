@@ -90,6 +90,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_session)) -> Token
     db.add(account)
     db.commit()
     db.refresh(account)
+    email_service.send_registration_confirmation(account.email, account.first_name)
     return _token_for(account, db)
 
 
@@ -154,7 +155,7 @@ def forgot_password(
     revealed = None
 
     if account is not None and account.is_active:
-        token, token_hash = security.new_reset_token()
+        token, token_hash = security.new_reset_code()
         db.add(
             PasswordReset(
                 account_id=account.id,
@@ -182,7 +183,9 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_session
     reset can be accounted for afterwards.
     """
     reset = db.scalar(
-        select(PasswordReset).where(PasswordReset.token_hash == security.fingerprint(body.token))
+        select(PasswordReset).where(
+            PasswordReset.token_hash == security.fingerprint_reset_code(body.token)
+        )
     )
     now = datetime.now(UTC)
     if reset is None or reset.used_at is not None or _expired(reset.expires_at, now):

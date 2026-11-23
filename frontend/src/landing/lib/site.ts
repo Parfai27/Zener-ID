@@ -3,7 +3,8 @@ export const PRODUCT = "Zener ID";
 export const SITE = import.meta.env.VITE_SITE_URL ?? "https://zenerid.com";
 
 /** The API clients call. */
-export const API_URL = import.meta.env.VITE_API_URL ?? "https://api.zenerid.com";
+export const API_URL =
+  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:8000" : "https://api.zenerid.com");
 
 /**
  * The client dashboard. In this app the landing, sign-in, register and dashboard

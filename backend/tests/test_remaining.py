@@ -107,7 +107,34 @@ def test_a_reset_is_sent_by_smtp_when_it_is_configured(monkeypatch):
     for name, value in {"EMAIL_ENABLED": True, "SMTP_HOST": "smtp.test", "SMTP_USER": "u", "SMTP_PASSWORD": "p"}.items():
         monkeypatch.setattr(settings, name, value)
     assert email_service.send_password_reset("jean@example.com", "TOKEN123") is True
-    assert sent["to"] == "jean@example.com" and "TOKEN123" in sent["body"] and sent["tls"] and sent["login"] == "u"
+    assert sent["to"] == "jean@example.com" and "TOKEN123" in sent["body"] and "reset-password?" not in sent["body"]
+    assert sent["tls"] and sent["login"] == "u"
+
+
+def test_registration_confirmation_is_sent_when_smtp_is_configured(monkeypatch):
+    sent = {}
+
+    def record_send(to, subject, body):
+        sent.update(to=to, subject=subject, body=body)
+
+    monkeypatch.setattr(email_service, "_send", record_send)
+    monkeypatch.setattr(settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.test")
+    monkeypatch.setattr(settings, "DASHBOARD_URL", "https://dashboard.test")
+
+    assert email_service.send_registration_confirmation("jean@example.com", "Jean") is True
+    assert sent["to"] == "jean@example.com"
+    assert "Welcome" in sent["subject"] and "Jean" in sent["body"]
+    assert "https://dashboard.test/login" in sent["body"]
+
+
+def test_reset_codes_are_six_digits_and_stored_as_server_keyed_hashes(monkeypatch):
+    monkeypatch.setattr(settings, "JWT_SECRET", "test-secret")
+    code, stored = security.new_reset_code()
+
+    assert len(code) == 6 and code.isdigit()
+    assert stored == security.fingerprint_reset_code(code)
+    assert stored != security.fingerprint(code)
 
 
 def test_a_failed_send_reports_false_and_does_not_raise(monkeypatch):

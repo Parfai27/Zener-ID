@@ -40,9 +40,8 @@ def _send(to: str, subject: str, body: str) -> None:
         server.send_message(message)
 
 
-def send_password_reset(email: str, token: str) -> bool:
-    """Send someone a link for setting a new password. Returns whether it was sent."""
-    link = f"{settings.DASHBOARD_URL.rstrip('/')}/reset-password?token={token}"
+def send_password_reset(email: str, code: str) -> bool:
+    """Send someone a code for setting a new password. Returns whether it was sent."""
     if not (settings.EMAIL_ENABLED and settings.SMTP_HOST):
         # The token itself is never logged: a log with a working reset link in it
         # is a way into an account.
@@ -52,12 +51,35 @@ def send_password_reset(email: str, token: str) -> bool:
         _send(
             email,
             "Reset your password",
-            f"Someone asked to reset the password for this address.\n\nOpen this link to choose a new one "
-            f"(it works once, for {settings.PASSWORD_RESET_MINUTES} minutes):\n{link}\n\n"
+            f"Someone asked to reset the password for this address.\n\n"
+            f"Your reset code is: {code}\n\n"
+            f"Enter this code in the password reset form. It works once, for "
+            f"{settings.PASSWORD_RESET_MINUTES} minutes.\n\n"
             "If it was not you, ignore this message and your password stays as it is.",
         )
     except (OSError, smtplib.SMTPException):
         logger.exception("Could not send the password reset email to %s", email)
+        return False
+    return True
+
+
+def send_registration_confirmation(email: str, first_name: str) -> bool:
+    """Send the confirmation email immediately after account registration."""
+    if not (settings.EMAIL_ENABLED and settings.SMTP_HOST):
+        logger.info("Account registered for %s. Email is off, so no confirmation was sent.", email)
+        return False
+    try:
+        dashboard = settings.DASHBOARD_URL.rstrip("/")
+        _send(
+            email,
+            "Welcome to Zener ID",
+            f"Hi {first_name},\n\n"
+            "Your Zener ID account has been registered successfully.\n\n"
+            f"You can now sign in at:\n{dashboard}/login\n\n"
+            "If you did not create this account, contact support immediately.",
+        )
+    except (OSError, smtplib.SMTPException):
+        logger.exception("Could not send the registration confirmation email to %s", email)
         return False
     return True
 

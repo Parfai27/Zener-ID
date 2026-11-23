@@ -1,5 +1,11 @@
-// The single import point for data. Today it re-exports the in-browser mock.
-// To connect the backend, add src/api/http.ts with the same function names
-// (calling /v1/...) and switch the export below.
+// Authentication is backed by FastAPI; verification and dashboard data remain mocked.
 export * from './mock'
+export {
+  currentSession,
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  resetPassword,
+} from './auth'
 export type * from './types'

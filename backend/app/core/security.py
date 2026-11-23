@@ -187,6 +187,22 @@ def new_reset_token() -> tuple[str, str]:
     return token, fingerprint(token)
 
 
+def new_reset_code() -> tuple[str, str]:
+    """Generate a six-digit reset code and the hash stored in the database."""
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    digest = hmac.new(
+        settings.JWT_SECRET.encode(), b"password-reset-code:" + code.encode(), hashlib.sha256
+    ).hexdigest()
+    return code, digest
+
+
+def fingerprint_reset_code(code: str) -> str:
+    """Hash a low-entropy reset code with the server secret before storing or looking it up."""
+    return hmac.new(
+        settings.JWT_SECRET.encode(), b"password-reset-code:" + code.encode(), hashlib.sha256
+    ).hexdigest()
+
+
 def check_evidence_store() -> None:
     """Refuse to start with Drive half configured.
 

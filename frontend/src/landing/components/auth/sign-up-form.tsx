@@ -42,11 +42,10 @@ function check(step: number, data: FormData, today: string): Errors {
 
 /**
  * Sign-up in two short steps, so the page never scrolls: the account itself,
- * then the contact details kyc-platform's register asks for. Every field stays
- * in the one form (the hidden step is only out of sight), and the whole form is
- * sent to this site's /api/auth/signup without leaving the page. That route
- * opens the account, sets the session cookie the dashboard shares, and answers
- * with where to go; a refusal is shown here with everything still filled in.
+ * then the contact details the backend's register endpoint asks for. Every field
+ * stays in the one form (the hidden step is only out of sight), and the form is
+ * sent to FastAPI without leaving the page. A refusal is shown with the form
+ * still filled in.
  */
 export function SignUpForm({ countries }: { countries: Country[] }) {
   const [step, setStep] = useState(0);
@@ -107,7 +106,7 @@ export function SignUpForm({ countries }: { countries: Country[] }) {
       if (general || elsewhere.length) setAlert(general ?? fieldsMessage(elsewhere));
       return;
     }
-    setAlert(AUTH_ERRORS[answer.error ?? "unavailable"] ?? AUTH_ERRORS.unavailable);
+    setAlert(answer.message ?? AUTH_ERRORS[answer.error ?? "unavailable"] ?? AUTH_ERRORS.unavailable);
   }
 
   return (

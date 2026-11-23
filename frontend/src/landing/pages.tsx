@@ -1,6 +1,5 @@
 // The landing, sign-in and register pages, ported from the Next.js `landing`
-// repo (src/app/page.tsx, login/page.tsx, signup/page.tsx). Server-only parts
-// (session cookie, redirect) are replaced by the mock session in this browser.
+// repo (src/app/page.tsx, login/page.tsx, signup/page.tsx).
 import { countries as CODES } from 'country-flag-icons'
 import { useEffect, useMemo } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'

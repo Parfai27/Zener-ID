@@ -15,6 +15,7 @@ import type {
 const KEY = 'zenerid.mock.v1'
 const SESSION_KEY = 'zenerid.session.v1'
 const STAFF_SESSION_KEY = 'zenerid.staff.v1'
+const RESET_CODES_KEY = 'zenerid.reset-codes.v1'
 
 export const FACE_THRESHOLD = 0.45
 export const REVIEW_BAND = 0.4
@@ -267,6 +268,40 @@ export async function register(body: RegisterRequest): Promise<Session> {
   const s: Session = { role: 'client', name, email: body.email, client_id: client.id }
   localStorage.setItem(SESSION_KEY, JSON.stringify(s))
   return s
+}
+
+export async function requestPasswordReset(email: string): Promise<string> {
+  await wait()
+  if (!EMAIL_PATTERN.test(email.trim())) throw new ApiError(422, 'Enter a valid email address.')
+  const normalized = email.trim().toLowerCase()
+  const codes = readResetCodes()
+  if (load().clients.some(c => c.email.toLowerCase() === normalized && c.status === 'active')) {
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
+    codes[normalized] = code
+    localStorage.setItem(RESET_CODES_KEY, JSON.stringify(codes))
+    return code
+  }
+  return ''
+}
+
+export async function resetPassword(email: string, code: string, password: string): Promise<void> {
+  await wait()
+  const normalized = email.trim().toLowerCase()
+  const normalizedCode = code.replace(/\s/g, '')
+  if (!/^\d{6}$/.test(normalizedCode)) throw new ApiError(400, 'Enter the 6-digit code from your email.')
+  if (password.length < 12) throw new ApiError(422, 'Use at least 12 characters for the password.')
+  const codes = readResetCodes()
+  if (codes[normalized] !== normalizedCode) throw new ApiError(400, 'That reset code is invalid or has expired.')
+  delete codes[normalized]
+  localStorage.setItem(RESET_CODES_KEY, JSON.stringify(codes))
+  logout('client')
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function readResetCodes(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(RESET_CODES_KEY) || '{}') as Record<string, string> }
+  catch { return {} }
 }
 
 export async function staffLogin(email: string, password: string, code: string): Promise<Session> {

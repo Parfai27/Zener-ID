@@ -108,7 +108,7 @@ export function FormAlert({ tone = "error", children }: { tone?: "error" | "note
   );
 }
 
-export type FormAnswer = { redirect?: string; error?: string; fields?: Record<string, string> };
+export type FormAnswer = { redirect?: string; error?: string; fields?: Record<string, string>; message?: string };
 
 /**
  * Send a sign-in or sign-up form to its route without leaving the page. Resolves
@@ -116,9 +116,7 @@ export type FormAnswer = { redirect?: string; error?: string; fields?: Record<st
  * with the reason for each refused field when the code is "fields".
  */
 export async function sendForm(form: HTMLFormElement): Promise<FormAnswer> {
-  // Mock mode: instead of the Next.js routes (/api/auth/login, /api/auth/signup),
-  // which call the backend's POST /v1/auth/login and /v1/auth/register, the same
-  // checks run against the in-browser mock and answer in the same shape.
+  // Keep the form's response shape stable while the API client calls FastAPI.
   const data = new FormData(form);
   const field = (name: string, trim = true) => {
     const value = data.get(name);
@@ -148,7 +146,7 @@ export async function sendForm(form: HTMLFormElement): Promise<FormAnswer> {
     if (status === 403) return { error: "suspended" };
     if (status === 409) return { error: "exists" };
     if (status === 429) return { error: "busy" };
-    return { error: "unavailable" };
+    return { error: "unavailable", message: e instanceof Error ? e.message : undefined };
   }
 }
 
