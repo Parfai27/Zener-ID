@@ -486,3 +486,33 @@ def test_card_back_alone_is_not_a_document():
     fields = extract_visual_fields(REAL_RWA_ID_BACK_LINES, TODAY)
     assert fields.document_types == []
     assert fields.country is None
+
+
+# The OCR of a real Rwandan licence (made-up person): the Kinyarwanda half of the
+# bilingual label is misread ("Amazna"), and a stray mark sits between the label
+# and the name.
+OCR_RWA_LICENCE_MISREAD_LABEL = [
+    "REPUBULIKA Y'U RWANDA",
+    "REPUBLIC OF RWANDA",
+    "URUHUSHYA RWO GUTWARA IBINYABIZIGA",
+    "DRIVING LICENSE",
+    "Amazna/Names",
+    "明",
+    "KWIZERA Alice",
+    "YaviDate of Birth",
+    "24/2/2002",
+    "Igitsina/Sex",
+    "Izarangira/ Expiry",
+    "Gore F",
+    "12/8/2035",
+]
+
+
+def test_the_other_half_of_a_bilingual_label_is_not_the_name():
+    fields = extract_visual_fields(OCR_RWA_LICENCE_MISREAD_LABEL, TODAY)
+    assert fields.full_name == "KWIZERA ALICE"
+
+
+def test_a_name_on_the_same_line_as_a_bilingual_label_is_still_read():
+    fields = extract_visual_fields(["NATIONAL IDENTITY CARD", "Amazina/Names KWIZERA Alice"], TODAY)
+    assert fields.full_name == "KWIZERA ALICE"

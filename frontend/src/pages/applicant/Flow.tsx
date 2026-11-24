@@ -4,12 +4,14 @@
 // because the face is compared with the photo printed on it.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
-import { AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, Camera, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, EyeOff, IdCard, ImageUp, Languages, RefreshCw, ScanFace, Smartphone, Sun, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BadgeCheck, Camera, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Copy, EyeOff, IdCard, ImageUp, Languages, RefreshCw, ScanFace, Smartphone, Sun, X } from 'lucide-react'
 import { ApiError, getSession, probeFrame, sessionQr, submitDocument, submitFace, type FrameProbe } from '../../api'
 import type { DocumentType, QualityReport, SessionView } from '../../api/types'
 import { Logo, Modal } from '../../components/ui'
 import { assessQuality, loadImage, toJpeg } from '../../lib/quality'
 import { useCamera } from './useCamera'
+import { InstructionSheet } from './Instructions'
+import { DocArt, FaceArt } from './InstructionArt'
 import { LANGS, LangCtx, initialLang, makeT, useLang, useT, type Dict, type Lang } from './i18n'
 
 // ---------------------------------------------------------------- data
@@ -55,6 +57,11 @@ function stepOf(sc: Screen): number {
 type DocShots = { document_type: DocumentType; front: string; back?: string }
 
 /** The backend's "no attempts left" refusal, so the page can say it in the person's language. */
+/** The instruction sheet opens by itself every time its page is reached. */
+function useInstructions() {
+  return useState(true)
+}
+
 const outOfAttempts = (e: unknown) => e instanceof ApiError && e.status === 409 && /attempt/i.test(e.message)
 
 // ---------------------------------------------------------------- flow
@@ -164,9 +171,7 @@ export function ApplicantFlow() {
           {sc.s === 'expired' && <Notice icon={<Clock size={34} />} tone="muted" title={t('expiredTitle')} text={t('expiredText')} />}
           {sc.s === 'other' && <Notice icon={<ArrowRight size={34} />} tone="muted" title={t('otherStepTitle')} text={t('otherStepText')} />}
           {sc.s === 'attempts' && <Notice icon={<Clock size={34} />} tone="muted" title={t('verifyingTitle')} text={t('attemptsUsed')} />}
-          {sc.s === 'consent' && <Consent onStart={() => setSc({ s: 'doc-select' })} />}
-
-          {sc.s === 'doc-select' && (
+          {(sc.s === 'doc-select' || sc.s === 'consent') && (
             <DocSelect country={country} allowed={session?.document_types} onCountry={c => setCountry(c)}
               onPick={d => { setDoc(d); setShots({}); setSc({ s: 'doc-method', side: 'front' }) }} />
           )}
@@ -205,17 +210,9 @@ export function ApplicantFlow() {
           )}
         </div>
         <div className="sf-foot">© {t('poweredBy')} <span style={{ display: 'inline-flex', marginLeft: 4 }}><Logo size="xs" /></span></div>
+        {sc.s === 'consent' && <ConsentSheet onStart={() => setSc({ s: 'doc-select' })} />}
+        {modal === 'phone' && <ContinueOnMobile token={token} onClose={() => setModal(null)} />}
       </div>
-
-      <Modal open={modal === 'phone'} onClose={() => setModal(null)} width={420}>
-        <div className="sf-modal-qr">
-          <Smartphone size={26} color="#0f5246" />
-          <h3 className="sf-title" style={{ fontSize: 19 }}>{t('phoneTitle')}</h3>
-          <p className="sf-sub">{t('phoneText')}</p>
-          <img src={sessionQr(token)} width={170} height={170} alt={t('phoneTitle')} style={{ background: '#fff' }} />
-          <button className="sf-btn primary" onClick={() => setModal(null)}>{t('close')}</button>
-        </div>
-      </Modal>
       <Modal open={modal === 'help'} onClose={() => setModal(null)} width={480}>
         <div className="col" style={{ gap: 12 }}>
           <h3 className="sf-title" style={{ fontSize: 19 }}>{t('helpTitle')}</h3>
@@ -227,6 +224,56 @@ export function ApplicantFlow() {
       </Modal>
     </div>
     </LangCtx.Provider>
+  )
+}
+
+/**
+ * "Continue via mobile": the link as a QR code to scan with a phone, or copied to
+ * open on another device. Progress is kept by the backend against the link, so the
+ * person carries on where they are.
+ */
+function ContinueOnMobile({ token, onClose }: { token: string; onClose: () => void }) {
+  const t = useT()
+  const [help, setHelp] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const link = `${window.location.origin}/verify/${token}`
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link)
+    } catch {
+      // Older browsers: select the text in a hidden field and copy that.
+      const field = Object.assign(document.createElement('textarea'), { value: link })
+      document.body.appendChild(field); field.select(); document.execCommand('copy'); field.remove()
+    }
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 2200)
+  }
+
+  return (
+    <div className="sf-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+      <div className="sf-mobile" role="dialog" aria-modal aria-labelledby="sf-mobile-title">
+        <button className="sf-mobile-close" onClick={onClose} aria-label={t('close')}><X size={17} strokeWidth={1.6} /></button>
+        <h2 id="sf-mobile-title" className="sf-mobile-title">{t('mobileTitle')}</h2>
+        <p className="sf-mobile-text">{t('mobileText')}</p>
+        <div className="sf-mobile-qr">
+          <div className="sf-qr-box"><img src={sessionQr(token)} alt={t('mobileTitle')} /></div>
+          <button className="sf-qr-help" onClick={() => setHelp(!help)} aria-expanded={help} aria-label={t('help')}><span>?</span></button>
+          {help && <div className="sf-qr-tip" role="note">{t('qrHelp')}</div>}
+        </div>
+        <div className="sf-or"><span>{t('or')}</span></div>
+        <button className={`sf-copy${copied ? ' done' : ''}`} onClick={copy}>
+          <span>{copied ? t('linkCopied') : t('copyLink')}</span>
+          <span className="ic">{copied ? <Check size={15} strokeWidth={2.6} /> : <Copy size={15} />}</span>
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -282,10 +329,6 @@ function Header({ step, onPhone, onHelp }: { step: number; onPhone: () => void; 
   )
 }
 
-// Solid glyphs matching the Shufti header icons.
-const FaceIcon = () => (
-  <svg viewBox="0 0 24 24" aria-hidden><path fill="currentColor" d="M12.6 2.2c-4.1 0-7.1 3-7.1 6.8 0 2 .7 3.5 1.9 4.7V21c0 .5.4.9.9.9h6.3c.5 0 .9-.4.9-.9v-2.1h1.9c1 0 1.7-.8 1.7-1.7v-2.4l1.5-.6c.4-.2.6-.6.4-1l-1.6-3.2c-.4-4.2-3-7.8-6.8-7.8z" /></svg>
-)
 const DocIcon = ({ d }: { d: DocumentType }) =>
   d === 'passport' ? (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden><rect x="4.5" y="2.5" width="15" height="19" rx="2" fill="currentColor" /><circle cx="12" cy="10" r="3.2" fill="none" stroke="#fff" strokeWidth="1.6" /><path d="M8.5 17h7" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" /></svg>
@@ -326,22 +369,49 @@ function Tip({ icon, title, children }: { icon: ReactNode; title: string; childr
   return <div className="sf-tip"><span className="ic">{icon}</span><div><b>{title}</b>{children}</div></div>
 }
 
-function Consent({ onStart }: { onStart: () => void }) {
+/**
+ * The first view: a sheet that slides up over the (dimmed) document step, like
+ * Shufti's instruction sheets. It says what will happen, in three steps, and asks
+ * for consent; agreeing slides it away and the document step is ready underneath.
+ */
+function ConsentSheet({ onStart }: { onStart: () => void }) {
   const t = useT()
   const [agree, setAgree] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  // Ticking the box is the agreement: the tick shows for a moment, then the sheet
+  // slides down and the document step is ready.
+  const tick = () => {
+    if (leaving) return
+    setAgree(true)
+    window.setTimeout(() => setLeaving(true), 350)
+    window.setTimeout(onStart, 350 + 260)
+  }
+  const steps: Array<{ icon: ReactNode; title: string; sub: string }> = [
+    { icon: <IdCard size={32} strokeWidth={1.8} />, title: t('stepDocument'), sub: t('docCardSub') },
+    { icon: <ScanFace size={32} strokeWidth={1.8} />, title: t('stepFace'), sub: t('faceCardSub') },
+    { icon: <BadgeCheck size={32} strokeWidth={1.8} />, title: t('stepResult'), sub: t('resultCardSub') },
+  ]
   return (
     <>
-      <h1 className="sf-title">{t('consentTitle')}</h1>
-      <p className="sf-sub">{t('consentText')}</p>
-      <div className="sf-docs" style={{ marginTop: 22 }}>
-        <div className="sf-doc" style={{ cursor: 'default' }}><span className="ic"><DocIcon d="id_card" /></span><div><b>{t('stepDocument')}</b><span>{t('docCardSub')}</span></div></div>
-        <div className="sf-doc" style={{ cursor: 'default' }}><span className="ic"><FaceIcon /></span><div><b>{t('stepFace')}</b><span>{t('faceCardSub')}</span></div></div>
+      <div className={`sf-dim${leaving ? ' out' : ''}`} />
+      <div className={`sf-sheet${leaving ? ' out' : ''}`} role="dialog" aria-modal aria-labelledby="sf-consent-title">
+        <h2 id="sf-consent-title" className="sf-sheet-title">{t('consentTitle')}</h2>
+        <p className="sf-sheet-text">{t('consentText')}</p>
+        <ol className="sf-journey">
+          {steps.map((step, i) => (
+            <li key={step.title} className="sf-journey-step">
+              {i > 0 && <span className="sf-journey-line" aria-hidden />}
+              <span className="sf-journey-ic">{step.icon}<span className="n" aria-hidden>{i + 1}</span></span>
+              <b>{step.title}</b>
+              <span>{step.sub}</span>
+            </li>
+          ))}
+        </ol>
+        <label className="sf-check">
+          <input type="checkbox" checked={agree} disabled={leaving} onChange={e => e.target.checked && tick()} />
+          <span>{t('agree')} <a href="#" onClick={e => e.preventDefault()}>{t('privacy')}</a> {t('and')} <a href="#" onClick={e => e.preventDefault()}>{t('terms')}</a>.</span>
+        </label>
       </div>
-      <label className="sf-check">
-        <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} />
-        <span>{t('agree')} <a href="#" onClick={e => e.preventDefault()}>{t('privacy')}</a> {t('and')} <a href="#" onClick={e => e.preventDefault()}>{t('terms')}</a>.</span>
-      </label>
-      <div className="sf-actions"><button className="sf-btn primary" disabled={!agree} onClick={onStart}>{t('getStarted')} <ArrowRight size={17} /></button></div>
     </>
   )
 }
@@ -397,6 +467,7 @@ function FaceCapture({ token, onBack, onDone }: { token: string; onBack: () => v
   const [hint, setHint] = useState('')
   const [ok, setOk] = useState(false)
   const [problem, setProblem] = useState('')
+  const [help, setHelp] = useInstructions()
   // Each run of the capture has a number; a run keeps going only while it is the
   // latest one and the page is still open. Leaving the page or pressing Cancel
   // bumps the number, so an old run stops at its next step. (Set again on every
@@ -549,6 +620,13 @@ function FaceCapture({ token, onBack, onDone }: { token: string; onBack: () => v
         {!running && <button className="sf-btn primary" disabled={cam.state !== 'live'} onClick={run}>{problem ? t('tryAgain') : t('start')}</button>}
         {running && <button className="sf-btn ghost" onClick={cancel}>{t('cancel')}</button>}
       </div>
+      {help && (
+        <InstructionSheet onClose={() => setHelp(false)} tips={[
+          { art: FaceArt.oval, label: t('faceTip1'), ok: true },
+          { art: FaceArt.light, label: t('faceTip2'), ok: false },
+          { art: FaceArt.accessories, label: t('faceTip3'), ok: false },
+        ]} />
+      )}
     </>
   )
 }
@@ -608,6 +686,7 @@ function DocMethod({ doc, side, onBack, onCamera, onImage }: {
   const t = useT()
   const file = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [help, setHelp] = useInstructions()
   const fromFile = (f?: File) => {
     if (!f) return
     setBusy(true)
@@ -625,6 +704,13 @@ function DocMethod({ doc, side, onBack, onCamera, onImage }: {
       </div>
       <input ref={file} type="file" accept="image/jpeg,image/png" hidden onChange={e => fromFile(e.target.files?.[0])} />
       <div className="sf-actions"><button className="sf-btn ghost" onClick={onBack}>{t('back')}</button></div>
+      {help && (
+        <InstructionSheet onClose={() => setHelp(false)} tips={[
+          { art: DocArt.frame, label: t('docTip1'), ok: true },
+          { art: DocArt.glare, label: t('docTip2'), ok: false },
+          { art: DocArt.cut, label: t('docTip3'), ok: false },
+        ]} />
+      )}
     </>
   )
 }

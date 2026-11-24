@@ -112,3 +112,83 @@
   .sf-line { width: 4px; margin: 0 1px; }
   .sf-lang { padding: 0 6px; gap: 4px; }
 }
+
+/* ---------------------------------------------------------------- continue via mobile */
+/* Laid out like Shufti's: the verification card dims, and the dialog sits inside it near the top.
+   Sizes measured from the reference screenshot (taken at about 1.73x). */
+.sf-card { position: relative; }
+.sf-overlay { position: absolute; inset: 0; z-index: 20; background: rgba(28, 33, 38, .5); border-radius: 0 0 6px 6px; animation: sf-fade .16s ease; }
+.sf-mobile { position: absolute; top: 45px; left: 50%; transform: translateX(-50%); width: 578px; max-width: calc(100% - 32px); max-height: calc(100% - 60px); overflow-y: auto; background: #fff; border-radius: 9px; padding: 26px 28px 28px; text-align: center; box-shadow: 0 10px 30px rgba(0, 0, 0, .16); animation: sf-pop .18s ease; }
+.sf-mobile-close { position: absolute; top: 14px; right: 16px; width: 28px; height: 28px; display: grid; place-items: center; border: 0; background: none; color: #6b7480; cursor: pointer; border-radius: 50%; padding: 0; }
+.sf-mobile-close:hover { background: #f3f7f2; color: #0b1614; }
+.sf-mobile-title { margin: 0 26px 0 0; text-align: left; font-family: Manrope, Inter, system-ui, sans-serif; font-weight: 800; font-size: 19.5px; line-height: 1.3; color: #0b1614; }
+.sf-mobile-text { margin: 10px 0 0; text-align: left; font-size: 13.5px; line-height: 1.7; color: #5f6b78; }
+.sf-mobile-qr { position: relative; display: inline-block; margin-top: 22px; }
+.sf-qr-box { padding: 6px; border: 1px solid #e0e6e3; border-radius: 6px; background: #fff; }
+.sf-qr-box img { display: block; width: 180px; height: 180px; }
+.sf-qr-help { position: absolute; left: 100%; bottom: 0; width: 30px; height: 30px; border: 0; border-radius: 0 5px 5px 0; background: #e7f5ef; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.sf-qr-help span { width: 17px; height: 17px; border-radius: 50%; background: #0f5246; color: #fff; font-weight: 700; font-size: 11px; line-height: 17px; }
+/* Opens above the ? button, inside the dialog, so it is never cut off. */
+.sf-qr-tip { position: absolute; right: -30px; bottom: 38px; width: 190px; text-align: left; background: #0b1614; color: #fff; font-size: 12px; line-height: 1.5; padding: 9px 11px; border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); z-index: 1; }
+.sf-or { display: flex; align-items: center; gap: 14px; width: 340px; max-width: 100%; margin: 20px auto 14px; color: #6b7480; font-size: 12px; }
+.sf-or::before, .sf-or::after { content: ''; flex: 1; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, rgba(191, 231, 214, 0), #bfe7d6); }
+.sf-or::after { background: linear-gradient(90deg, #bfe7d6, rgba(191, 231, 214, 0)); }
+.sf-copy { display: inline-flex; align-items: center; gap: 12px; border: 0; border-radius: 999px; background: #eef6f2; padding: 9px 9px 9px 18px; font: inherit; font-size: 14px; color: #0b1614; cursor: pointer; transition: background .15s; }
+.sf-copy:hover { background: #e2f1ea; }
+.sf-copy .ic { width: 37px; height: 37px; border-radius: 50%; background: #fff; display: grid; place-items: center; color: #0f5246; flex: none; }
+.sf-copy.done .ic { background: #0f5246; color: #fff; }
+@keyframes sf-fade { from { opacity: 0 } }
+@keyframes sf-pop { from { opacity: 0; transform: translate(-50%, 6px) } }
+@media (max-width: 760px) {
+  .sf-mobile { top: 24px; padding: 22px 18px 22px; }
+}
+
+/* ---------------------------------------------------------------- consent sheet (first view) */
+/* Slides up over the dimmed document step, like Shufti's instruction sheets. The header stays clear. */
+.sf-dim { position: absolute; left: 0; right: 0; top: 61px; bottom: 0; z-index: 15; background: rgba(28, 33, 38, .42); border-radius: 0 0 6px 6px; animation: sf-fade .25s ease; }
+.sf-dim.out { animation: sf-fade-out .26s ease forwards; }
+.sf-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 16; min-height: calc(100% - 100px); max-height: calc(100% - 75px); overflow-y: auto; display: flex; flex-direction: column; justify-content: center; background: #fff; border-radius: 22px 22px 6px 6px; box-shadow: 0 -12px 32px rgba(6, 48, 43, .14); padding: 32px 36px 34px; animation: sf-sheet-in .42s cubic-bezier(.2, .85, .25, 1); }
+.sf-sheet.out { animation: sf-sheet-out .26s ease-in forwards; }
+.sf-sheet-title { margin: 0; text-align: center; font-family: Manrope, Inter, system-ui, sans-serif; font-weight: 800; font-size: 21px; color: #0b1614; }
+.sf-sheet-text { margin: 8px auto 0; max-width: 540px; text-align: center; font-size: 14.5px; line-height: 1.6; color: #5f6368; }
+.sf-journey { list-style: none; margin: 28px 0 8px; padding: 0; display: flex; justify-content: center; }
+.sf-journey-step { position: relative; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; padding: 0 6px; }
+.sf-journey-ic { position: relative; width: 82px; height: 82px; border-radius: 50%; display: grid; place-items: center; color: #0f5246; margin-bottom: 7px; background: radial-gradient(circle at 50% 45%, #fff 0 40%, #e3f8ef 63%, #c6efdd 100%); box-shadow: 0 0 0 6px rgba(47, 224, 168, .08); }
+.sf-journey-ic .n { position: absolute; right: -2px; bottom: 2px; width: 21px; height: 21px; border-radius: 50%; background: #0f5246; color: #fff; font-size: 11px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; }
+.sf-journey-step b { font-size: 14.5px; font-weight: 600; color: #1f2328; }
+.sf-journey-step > span:last-child { font-size: 12.5px; line-height: 1.45; color: #5f6368; }
+.sf-journey-line { position: absolute; top: 41px; right: calc(50% + 51px); width: calc(100% - 102px); height: 2px; background: repeating-linear-gradient(90deg, #9fdcc4 0 5px, transparent 5px 10px); }
+.sf-sheet .sf-check { margin-top: 26px; font-size: 14.5px; }
+.sf-sheet .sf-actions { padding-top: 18px; }
+@keyframes sf-sheet-in { from { transform: translateY(100%); } }
+@keyframes sf-sheet-out { to { transform: translateY(100%); } }
+@keyframes sf-fade-out { to { opacity: 0; } }
+@media (max-width: 760px) {
+  .sf-sheet { padding: 26px 18px 26px; min-height: 0; }
+  .sf-journey-step { width: 33%; padding: 0 2px; }
+  .sf-journey-ic { width: 56px; height: 56px; }
+  .sf-journey-ic svg { width: 22px; height: 22px; }
+  .sf-journey-line { top: 28px; right: calc(50% + 36px); width: calc(100% - 72px); }
+  .sf-journey-step > span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .sf-sheet, .sf-sheet.out, .sf-dim, .sf-dim.out { animation: none; } }
+
+/* ---------------------------------------------------------------- instruction sheets */
+.sf-sheet-close { position: absolute; top: 14px; right: 16px; width: 34px; height: 34px; display: grid; place-items: center; border: 0; background: none; color: #8a929c; cursor: pointer; border-radius: 50%; padding: 0; }
+.sf-sheet-close:hover { background: #f3f7f2; color: #0b1614; }
+/* Only as tall as the pictures: the consent sheet's fill-the-card height left a gap here. */
+.sf-instructions { justify-content: flex-start; min-height: 0; padding-bottom: 30px; }
+.sf-tipgrid { display: flex; flex-direction: column; align-items: center; gap: 18px; margin-top: 26px; }
+.sf-tiprow { display: flex; justify-content: space-around; width: 100%; max-width: 600px; }
+.sf-tipitem { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 200px; text-align: center; }
+.sf-tipitem figcaption { font-size: 13.5px; color: #3d4249; line-height: 1.4; }
+.sf-tipart { position: relative; width: 84px; height: 84px; border-radius: 50%; overflow: visible; display: block; }
+.sf-tipart > svg { width: 100%; height: 100%; border-radius: 50%; display: block; background: radial-gradient(circle at 50% 42%, #f3fbf7 0 45%, #d9f5e8 75%, #bfeeda 100%); box-shadow: 0 0 0 6px rgba(47, 224, 168, .10); }
+.sf-tipart .mark { position: absolute; right: 2px; bottom: 4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; box-shadow: 0 0 0 2px #fff; }
+.sf-tipart.ok .mark { background: #0f5246; }
+.sf-tipart.no .mark { background: #d64545; }
+@media (max-width: 760px) {
+  .sf-tipitem { width: 46%; }
+  .sf-tipart { width: 70px; height: 70px; }
+  .sf-tipitem figcaption { font-size: 12.5px; }
+}

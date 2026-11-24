@@ -57,7 +57,8 @@ LABELS = {
                         "SERIAL NO", "SERIAL NUMBER", "NUMERO", "NUMBER", "NO."],
     "surname": ["SURNAME", "LAST NAME", "FAMILY NAME", "NOM DE FAMILLE", "NOM"],
     "given_names": ["GIVEN NAMES", "GIVEN NAME", "FIRST NAME", "FIRST NAMES", "PRENOMS", "PRENOM", "OTHER NAMES"],
-    "full_name": ["FULL NAME", "NAMES", "NAME", "AMAZINA", "JINA"],
+    # AMAZNA: how the OCR often reads the Kinyarwanda "Amazina" on Rwandan cards.
+    "full_name": ["FULL NAME", "NAMES", "NAME", "AMAZINA", "AMAZNA", "JINA"],
     "sex": ["SEX", "GENDER", "SEXE", "IGITSINA", "JINSIA"],
 }
 
@@ -136,12 +137,21 @@ def _has_label(line: str, labels: list[str]) -> bool:
 
 
 def _value_after_label(lines: list[str], index: int, labels: list[str]) -> list[str]:
-    """Candidate values for a label: the rest of its own line, then the next two lines."""
+    """Candidate values for a label: the rest of its own line, then the next two lines.
+
+    A label printed in two languages joined by a slash ("AMAZINA/NAMES",
+    "NOM / SURNAME") has the other language's word on the same line, and that word
+    is a label too, however the OCR spelled it: the value is on the lines below.
+    """
     line = lines[index]
     rest = line
     for label in labels:
         rest = re.sub(rf"(?<![A-Z]){re.escape(label)}(?![A-Z])", " ", rest)
     rest = re.sub(r"^[\s:/.\-]+", "", rest).strip()
+    bilingual = any(re.search(rf"(?<![A-Z]){re.escape(label)}\s*/|/\s*{re.escape(label)}(?![A-Z])", line) for label in labels)
+    if bilingual and re.fullmatch(r"[A-Z'\-]+\s*/?", rest):
+        # All that is left is the other language's label: the value is below.
+        return lines[index + 1:index + 3]
     return [rest, *lines[index + 1:index + 3]]
 
 
