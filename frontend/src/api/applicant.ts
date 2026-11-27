@@ -2,6 +2,7 @@
 // credential: these calls carry no sign-in.
 //   GET  /v1/sessions/{token}            where the person is, what comes next
 //   POST /v1/sessions/{token}/document   document photos (front, back)
+//   POST /v1/document/frame              the document under the guide, for auto-capture
 //   POST /v1/face/frame                  one camera frame, for live guidance
 //   POST /v1/sessions/{token}/face       liveness frames, the portrait, a short clip
 import { ApiError } from './errors'
@@ -17,6 +18,7 @@ interface SessionResponse {
   expired: boolean
   expires_at: string | null
   document_types: string[] | null
+  redirect_url: string | null
 }
 
 const DOCS: DocumentType[] = ['passport', 'id_card', 'driving_license']
@@ -37,6 +39,7 @@ export async function getSession(token: string): Promise<SessionView> {
     completed_steps: s.completed_steps,
     expired: s.expired,
     expires_at: s.expires_at ?? '',
+    redirect_url: s.redirect_url ?? null,
     document_types: (s.document_types?.filter(d => DOCS.includes(d as DocumentType)) as DocumentType[] | undefined) ?? DOCS,
   }
 }
@@ -69,6 +72,20 @@ export async function submitDocument(token: string, input: { document_type: Docu
   return upload<{ decision: StepDecision; reasons: string[]; warnings: string[]; portrait: string | null }>(
     `/sessions/${encodeURIComponent(token)}/document`, form,
   )
+}
+
+/** What the document under the guide looks like to the server: usable, or what to fix. */
+export interface DocumentProbe {
+  usable: boolean
+  hints: string[]
+}
+
+/** One frame cropped to the guide; the server says whether it is good enough to take. */
+export function probeDocumentFrame(frame: Blob, side: 'front' | 'back'): Promise<DocumentProbe> {
+  const form = new FormData()
+  form.append('frame', frame, 'frame.jpg')
+  form.append('side', side)
+  return upload<DocumentProbe>('/document/frame', form, 15000)
 }
 
 /** What one camera frame looks like to the server: usable, and which way the head points. */

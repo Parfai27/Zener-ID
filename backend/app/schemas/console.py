@@ -184,6 +184,14 @@ class ConsoleClientOverview(BaseModel):
     staff: int = 0
 
 
+class ConsoleClientStatusUpdate(BaseModel):
+    """Suspend a client account, or make it active again."""
+
+    status: str = Field(pattern="^(active|suspended)$")
+    # Why, kept in the audit log.
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class ConsoleClientList(BaseModel):
     items: list[ConsoleClientSummary]
     total: int

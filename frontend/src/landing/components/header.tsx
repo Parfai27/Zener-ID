@@ -73,9 +73,8 @@ const NAV: NavEntry[] = [
 ];
 
 /**
- * Whether this browser is signed in to the dashboard. Mock mode: the session
- * lives in this browser (src/api/mock.ts). With the backend this becomes a
- * check of the session with GET /v1/auth/me.
+ * Whether this browser is signed in to the dashboard: a client token is kept
+ * (src/api/session.ts). The dashboard checks it with the backend when it opens.
  */
 function useSignedIn() {
   const [signedIn, setSignedIn] = useState(false);

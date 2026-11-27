@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { AlertTriangle, Copy, KeyRound, Plus, ShieldCheck } from 'lucide-react'
 import { createApiKey, listApiKeys, revokeApiKey } from '../../api'
 import type { ApiKey, CreatedApiKey } from '../../api/types'
-import { ErrorState, Loading, Modal, Pill, Spinner, copyText, useData, useToast } from '../../components/ui'
+import { Avatar, Banner, Button, Card, EmptyRow, ErrorState, ErrorText, Field, Input, LoadingRow, Modal, PageHead, Pill, Select, Spinner, Table, Td, Tr, copyText, useData, useToast, type Tone } from '../../components/ui'
 import { dateTime, timeAgo } from '../../lib/format'
 import { API } from '../../api/http'
 
-const STATE: Record<string, { label: string; tone: 'ok' | 'warn' | 'muted' | 'bad' }> = {
+const STATE: Record<string, { label: string; tone: Tone }> = {
   active: { label: 'Active', tone: 'ok' },
   expiring: { label: 'Expiring soon', tone: 'warn' },
   suspended: { label: 'Suspended', tone: 'bad' },
@@ -22,48 +22,45 @@ export function ApiKeys() {
   const [revoke, setRevoke] = useState<ApiKey | null>(null)
   return (
     <>
-      <div className="page-head">
-        <div><h1>API keys</h1><p>Use keys to create and read verifications from your own application.</p></div>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}><Plus size={16} /> Create API key</button>
-      </div>
-      <div className="banner info"><ShieldCheck size={18} /><div>A new key is shown <b style={{ display: 'inline' }}>once</b>. We store only a hash of it, so it can never be shown again. Revoke a key straight away if it leaks.</div></div>
+      <PageHead title="API keys" sub="Use keys to create and read verifications from your own application.">
+        <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} /> Create API key</Button>
+      </PageHead>
+      <Banner tone="info" icon={<ShieldCheck size={18} />}>A new key is shown <b>once</b>. We store only a hash of it, so it can never be shown again. Revoke a key straight away if it leaks.</Banner>
       {error && <ErrorState message={error} onRetry={reload} />}
-      <div className="table-wrap">
-        <table className="table">
-          <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Expires</th><th>Last used</th><th>Status</th><th /></tr></thead>
-          <tbody>
-            {loading && !data && <tr><td colSpan={7}><Loading /></td></tr>}
-            {data?.length === 0 && <tr><td colSpan={7} className="empty">No keys yet. Create one to call the API from your own servers.</td></tr>}
-            {data?.map(k => (
-              <tr key={k.id}>
-                <td><b>{k.name}</b></td>
-                <td><span className="mono">{k.prefix}••••••••</span></td>
-                <td className="muted">{dateTime(k.created_at)}</td>
-                <td className="muted">{dateTime(k.expires_at)}</td>
-                <td className="muted">{k.last_used_at ? timeAgo(k.last_used_at) : 'Never'}</td>
-                <td>{(() => { const s = STATE[k.state ?? (k.revoked ? 'revoked' : 'active')] ?? STATE.active; return <Pill tone={s.tone}>{s.label}</Pill> })()}</td>
-                <td style={{ textAlign: 'right' }}>{!k.revoked && k.state !== 'expired' && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--bad)' }} onClick={() => setRevoke(k)}>Revoke</button>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="grid g2">
-        <div className="card col" style={{ gap: 6 }}><span className="small muted">Base URL</span><span className="mono">{apiBase()}</span><span className="small muted">Send the key in the <span className="mono">X-API-Key</span> header.</span></div>
-        <div className="card col" style={{ gap: 6 }}><span className="small muted">Documentation</span><b>OpenAPI reference and examples</b><span className="small muted">Served by the backend at /docs.</span></div>
+      <Table head={['Name', 'Key', 'Created', 'Expires', 'Last used', 'Status', '']}>
+        {loading && !data && <LoadingRow cols={7} />}
+        {data?.length === 0 && <EmptyRow cols={7}>No keys yet. Create one to call the API from your own servers.</EmptyRow>}
+        {data?.map(k => {
+          const s = STATE[k.state ?? (k.revoked ? 'revoked' : 'active')] ?? STATE.active
+          return (
+            <Tr key={k.id}>
+              <Td><b>{k.name}</b></Td>
+              <Td mono>{k.prefix}••••••••</Td>
+              <Td muted>{dateTime(k.created_at)}</Td>
+              <Td muted>{dateTime(k.expires_at)}</Td>
+              <Td muted>{k.last_used_at ? timeAgo(k.last_used_at) : 'Never'}</Td>
+              <Td><Pill tone={s.tone}>{s.label}</Pill></Td>
+              <Td right>{!k.revoked && k.state !== 'expired' && <Button variant="ghost" size="sm" className="text-bad" onClick={() => setRevoke(k)}>Revoke</Button>}</Td>
+            </Tr>
+          )
+        })}
+      </Table>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card className="flex flex-col gap-1.5"><span className="text-[12.5px] text-muted">Base URL</span><span className="break-all font-mono text-[12.5px]">{apiBase()}</span><span className="text-[12.5px] text-muted">Send the key in the <span className="font-mono">X-API-Key</span> header.</span></Card>
+        <Card className="flex flex-col gap-1.5"><span className="text-[12.5px] text-muted">Documentation</span><b>OpenAPI reference and examples</b><span className="text-[12.5px] text-muted">Served by the backend at /docs.</span></Card>
       </div>
       <CreateKey open={creating} onClose={() => { setCreating(false); reload() }} />
       <Modal open={!!revoke} onClose={() => setRevoke(null)} width={440}>
-        <div className="col" style={{ gap: 14 }}>
-          <span className="avatar lg" style={{ background: 'var(--bad-tint)', color: 'var(--bad)' }}><AlertTriangle size={20} /></span>
-          <h3 style={{ fontSize: 20 }}>Revoke “{revoke?.name}”?</h3>
-          <p className="muted">Any server using <span className="mono">{revoke?.prefix}…</span> stops working immediately. This cannot be undone.</p>
-          <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary" onClick={() => setRevoke(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={async () => {
+        <div className="flex flex-col gap-3.5">
+          <Avatar lg className="bg-bad-tint text-bad"><AlertTriangle size={20} /></Avatar>
+          <h2 className="text-lg">Revoke “{revoke?.name}”?</h2>
+          <p className="text-muted">Any server using <span className="font-mono">{revoke?.prefix}…</span> stops working immediately. This cannot be undone.</p>
+          <div className="flex justify-end gap-3">
+            <Button onClick={() => setRevoke(null)}>Cancel</Button>
+            <Button variant="danger" onClick={async () => {
               try { await revokeApiKey(revoke!.id); toast(`“${revoke!.name}” revoked`) } catch (e) { toast((e as Error).message, 'bad') }
               setRevoke(null); reload()
-            }}>Revoke key</button>
+            }}>Revoke key</Button>
           </div>
         </div>
       </Modal>
@@ -85,23 +82,27 @@ function CreateKey({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
   return (
     <Modal open={open} onClose={created ? () => {} : close}>
-      <div className="col" style={{ gap: 16 }}>
-        <span className="avatar lg"><KeyRound size={20} /></span>
+      <div className="flex flex-col gap-4">
+        <Avatar lg><KeyRound size={20} /></Avatar>
         {!created ? (
           <>
-            <h3 style={{ fontSize: 20 }}>Create an API key</h3>
-            <div className="field"><label>Name</label><input className="input" autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Production server" onKeyDown={e => e.key === 'Enter' && create()} /><span className="hint">So you can tell keys apart later.</span></div>
-            <div className="field"><label>Expires after</label><select className="select" value={days} onChange={e => setDays(Number(e.target.value))}>{[30, 90, 180, 365].map(d => <option key={d} value={d}>{d} days</option>)}</select><span className="hint">Keys always expire, so old ones do not keep working forever.</span></div>
-            {error && <div className="error-text">{error}</div>}
-            <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn btn-secondary" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={create} disabled={busy}>{busy ? <Spinner sm /> : 'Create key'}</button></div>
+            <h2 className="text-lg">Create an API key</h2>
+            <Field label="Name" hint="So you can tell keys apart later.">
+              <Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Production server" onKeyDown={e => e.key === 'Enter' && create()} />
+            </Field>
+            <Field label="Expires after" hint="Keys always expire, so old ones do not keep working forever.">
+              <Select value={days} onChange={e => setDays(Number(e.target.value))}>{[30, 90, 180, 365].map(d => <option key={d} value={d}>{d} days</option>)}</Select>
+            </Field>
+            {error && <ErrorText>{error}</ErrorText>}
+            <div className="flex justify-end gap-3"><Button onClick={close}>Cancel</Button><Button variant="primary" onClick={create} disabled={busy}>{busy ? <Spinner sm /> : 'Create key'}</Button></div>
           </>
         ) : (
           <>
-            <h3 style={{ fontSize: 20 }}>Copy your new key now</h3>
-            <p className="muted">This is the only time the full key is shown. Store it in your secrets manager.</p>
-            <div className="row"><input className="input mono grow" readOnly value={created.secret} onFocus={e => e.target.select()} /><button className="btn btn-secondary" onClick={() => { copyText(created.secret); toast('Key copied') }}><Copy size={16} /> Copy</button></div>
-            <div className="banner warn"><AlertTriangle size={16} /><div>You will not be able to see this key again after closing.</div></div>
-            <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn btn-primary" onClick={close}>I have copied it</button></div>
+            <h2 className="text-lg">Copy your new key now</h2>
+            <p className="text-muted">This is the only time the full key is shown. Store it in your secrets manager.</p>
+            <div className="flex gap-2"><Input className="font-mono" readOnly value={created.secret} onFocus={e => e.target.select()} /><Button onClick={() => { copyText(created.secret); toast('Key copied') }}><Copy size={16} /> Copy</Button></div>
+            <Banner tone="warn" icon={<AlertTriangle size={16} />}>You will not be able to see this key again after closing.</Banner>
+            <div className="flex justify-end"><Button variant="primary" onClick={close}>I have copied it</Button></div>
           </>
         )}
       </div>

@@ -1,30 +1,32 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, Copy, Download, XCircle } from 'lucide-react'
-import { downloadReport, getVerification } from '../../api'
+import { useParams } from 'react-router-dom'
+import { AlertTriangle, CheckCircle2, Clock, Copy, Download, XCircle } from 'lucide-react'
+import { downloadReport, downloadStaffReport, getStaffVerification, getVerification } from '../../api'
 import type { Verification } from '../../api/types'
-import { Avatar, ErrorState, Loading, Spinner, StatusPill, copyText, useData, useToast } from '../../components/ui'
-import { ClaimedCard, EvidenceCard, ExtractedCard, SessionCard } from '../../components/SessionCard'
+import { Avatar, Banner, Button, CodeChip, Crumb, ErrorState, Loading, PageHead, Spinner, StatusPill, copyText, useData, useToast } from '../../components/ui'
+import { ClaimedCard, EvidenceCard, ExtractedCard, ReviewHistory, SessionCard } from '../../components/SessionCard'
 import { dateTime, docLabel, fullName, reasonText } from '../../lib/format'
 
+/** One verification. The client dashboard opens it by reference, the admin console by id. */
 export function VerificationDetail({ scope = 'client' }: { scope?: 'client' | 'staff' }) {
-  const { reference = '' } = useParams()
-  const { data: v, error, loading, reload } = useData(() => getVerification(reference, scope), [reference, scope])
+  const { reference = '', id = '' } = useParams()
+  const key = scope === 'client' ? reference : id
+  const { data: v, error, loading, reload } = useData(() => (scope === 'client' ? getVerification(key) : getStaffVerification(key)), [key, scope])
   const back = scope === 'client' ? '/app/verifications' : '/admin/verifications'
   // While the applicant is still at it, look again every few seconds so the
   // result appears by itself.
   const open = v?.status === 'pending' || v?.status === 'in_progress'
   useEffect(() => {
-    if (scope !== 'client' || !open) return
+    if (!open) return
     const timer = window.setInterval(reload, 5000)
     return () => window.clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, open])
+  }, [open])
   return (
     <>
-      <Link to={back} className="crumb"><ArrowLeft size={14} /> Verifications</Link>
+      <Crumb to={back}>Verifications</Crumb>
       {loading && !v && <Loading />}
-      {error && <ErrorState message={error} onRetry={reload} />}
+      {error && !v && <ErrorState message={error} onRetry={reload} />}
       {v && <Detail v={v} scope={scope} />}
     </>
   )
@@ -34,50 +36,34 @@ function Detail({ v, scope }: { v: Verification; scope: 'client' | 'staff' }) {
   const toast = useToast()
   const [downloading, setDownloading] = useState(false)
   const report = async () => {
-    if (scope === 'staff') return toast('The admin console is not connected yet.', 'bad')
     setDownloading(true)
-    try { await downloadReport(v.reference) } catch (e) { toast((e as Error).message, 'bad') } finally { setDownloading(false) }
+    try { await (scope === 'client' ? downloadReport(v.reference) : downloadStaffReport(v.id, v.reference)) } catch (e) { toast((e as Error).message, 'bad') } finally { setDownloading(false) }
   }
   return (
     <>
-      <div className="page-head" style={{ alignItems: 'center' }}>
-        <div className="row" style={{ gap: 14 }}>
-          <Avatar name={fullName(v.applicant)} lg />
-          <div>
-            <div className="row" style={{ gap: 10 }}><h1 style={{ fontSize: 24 }}>{fullName(v.applicant)}</h1><StatusPill status={v.status} /></div>
-            <p className="small">
-              <span className="mono">{v.reference}</span>
-              {v.document_type && <> · {docLabel[v.document_type]}</>}
-              {v.customer_id && <> · {v.customer_id}</>}
-              {v.completed_at ? <> · Completed {dateTime(v.completed_at)}{v.decision_seconds ? ` · ${v.decision_seconds} s` : ''}</> : <> · Created {dateTime(v.created_at)}</>}
-              {v.client_name && <> · {v.client_name}</>}
-            </p>
-          </div>
-        </div>
-        <div className="row">
-          {(v.status === 'pending' || v.status === 'in_progress') && (
-            <button className="btn btn-secondary" onClick={() => { copyText(v.session_url); toast('Applicant link copied') }}><Copy size={16} /> Copy link</button>
-          )}
-          <button className="btn btn-secondary" onClick={report} disabled={downloading}>{downloading ? <Spinner sm /> : <Download size={16} />} Download report</button>
-        </div>
-      </div>
+      <PageHead center
+        title={<span className="flex flex-wrap items-center gap-2.5"><Avatar name={fullName(v.applicant)} lg /><span className="text-2xl">{fullName(v.applicant)}</span><StatusPill status={v.status} /></span>}
+        sub={
+          <span className="text-[12.5px]">
+            <span className="font-mono">{v.reference}</span>
+            {v.document_type && <> · {docLabel[v.document_type]}</>}
+            {v.customer_id && <> · {v.customer_id}</>}
+            {v.completed_at ? <> · Completed {dateTime(v.completed_at)}{v.decision_seconds ? ` · ${v.decision_seconds} s` : ''}</> : <> · Created {dateTime(v.created_at)}</>}
+            {scope === 'staff' && v.client_name && <> · {v.client_name}</>}
+          </span>
+        }>
+        {open(v) && v.session_url && (
+          <Button onClick={() => { copyText(v.session_url); toast('Applicant link copied') }}><Copy size={16} /> Copy link</Button>
+        )}
+        <Button onClick={report} disabled={downloading}>{downloading ? <Spinner sm /> : <Download size={16} />} Download report</Button>
+      </PageHead>
       <DecisionBanner v={v} />
-      <div className="grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 340px', alignItems: 'start' }}>
-        <div className="col" style={{ gap: 16 }}>
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex flex-col gap-4">
           <SessionCard v={v} />
-          {v.reviews.length > 0 && (
-            <div className="card">
-              <div className="card-head"><span className="card-title">Review history</span></div>
-              {v.reviews.map((r, i) => (
-                <div key={i} className="row" style={{ alignItems: 'flex-start', padding: '8px 0' }}>
-                  <Avatar name={r.by} />
-                  <div className="grow"><b>{r.by}</b> <span className="muted">{r.action} · {dateTime(r.at)}</span><p className="small" style={{ marginTop: 2 }}>{r.note}</p></div>
-                </div>
-              ))}
-            </div>
-          )}
+          <ReviewHistory v={v} />
         </div>
-        <div className="col" style={{ gap: 16 }}>
+        <div className="flex flex-col gap-4">
           <EvidenceCard v={v} />
           <ExtractedCard v={v} />
           <ClaimedCard v={v} />
@@ -87,21 +73,21 @@ function Detail({ v, scope }: { v: Verification; scope: 'client' | 'staff' }) {
   )
 }
 
+const open = (v: Verification) => v.status === 'pending' || v.status === 'in_progress'
+
 function DecisionBanner({ v }: { v: Verification }) {
   if (v.status === 'passed')
-    return <div className="banner ok"><CheckCircle2 size={20} /><div><b>Verified</b>{v.reviews.length ? 'Approved after manual review.' : `All ${v.checks.length || ''} checks passed.`}</div></div>
+    return <Banner tone="ok" icon={<CheckCircle2 size={20} />} title="Verified">{v.reviews.length ? 'Approved after manual review.' : `All ${v.checks.length || ''} checks passed.`}</Banner>
   if (v.status === 'failed')
     return (
-      <div className="banner bad"><XCircle size={20} />
-        <div className="grow"><b>Declined: {(reasonText[v.reasons[0]] || 'a check failed').toLowerCase()}</b>
-          {v.checks.length ? `${v.checks.filter(c => c.status === 'fail').length} of ${v.checks.length} checks failed.` : ''}{v.reviews.length ? ' Decided by a reviewer.' : ''}
-        </div>
-        <div className="row" style={{ gap: 6 }}>{v.reasons.map(r => <span key={r} className="code-chip bad" style={{ background: '#fff' }}>{r}</span>)}</div>
-      </div>
+      <Banner tone="bad" icon={<XCircle size={20} />} title={`Declined: ${(reasonText[v.reasons[0]] || 'a check failed').toLowerCase()}`}
+        action={<div className="flex flex-wrap gap-1.5">{v.reasons.map(r => <CodeChip key={r} tone="bad" className="!bg-white">{r}</CodeChip>)}</div>}>
+        {v.checks.length ? `${v.checks.filter(c => c.status === 'fail').length} of ${v.checks.length} checks failed.` : ''}{v.reviews.length ? ' Decided by a reviewer.' : ''}
+      </Banner>
     )
   if (v.status === 'needs_review')
-    return <div className="banner warn"><AlertTriangle size={20} /><div><b>Waiting for a reviewer</b>{reasonText[v.reasons[0]] || 'A check needs a person to look at it'}. Zener ID staff usually decide within a few hours.</div></div>
+    return <Banner tone="warn" icon={<AlertTriangle size={20} />} title="Waiting for a reviewer">{reasonText[v.reasons[0]] || 'A check needs a person to look at it'}. Zener ID staff usually decide within a few hours.</Banner>
   if (v.status === 'expired')
-    return <div className="banner info"><Clock size={20} /><div><b>Link expired</b>The applicant did not finish before {dateTime(v.expires_at || undefined)}. Create a new verification to try again.</div></div>
-  return <div className="banner info"><Clock size={20} /><div><b>{v.status === 'pending' ? 'Waiting for the applicant' : 'Applicant is completing the checks'}</b>This page updates by itself when they finish.</div></div>
+    return <Banner tone="info" icon={<Clock size={20} />} title="Link expired">The applicant did not finish before {dateTime(v.expires_at || undefined)}. Create a new verification to try again.</Banner>
+  return <Banner tone="info" icon={<Clock size={20} />} title={v.status === 'pending' ? 'Waiting for the applicant' : 'Applicant is completing the checks'}>This page updates by itself when they finish.</Banner>
 }

@@ -1,4 +1,4 @@
-/** An error from the API (the backend, or the mock for the parts not connected yet). */
+/** An error from the API (the backend). */
 export class ApiError extends Error {
   constructor(
     public status: number,

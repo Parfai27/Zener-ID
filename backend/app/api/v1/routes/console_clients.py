@@ -6,9 +6,11 @@ filter on other pages (`/options`) still lists clients only: an account counts
 as a client unless it is a staff account that has never opened a verification.
 
 Owners and admins can also create an account, client or staff, and change an
-account's console role. Only an owner gives or takes the owner role, nobody
+account's console role, and suspend or reactivate an account. Only an owner gives or takes the owner role, nobody
 changes their own, and the last active owner keeps it. Both are kept in
-audit_events (account.created, account.access_updated).
+audit_events (account.created, account.access_updated,
+account.suspended, account.reactivated). A suspended account cannot sign in, and
+its API keys and tokens stop working.
 
 The list filters by a search,
 the account status, the last sign-in, the country, the billing plan and when the
@@ -37,6 +39,7 @@ from app.schemas.console import (
     ConsoleClientList,
     ConsoleClientOption,
     ConsoleClientOverview,
+    ConsoleClientStatusUpdate,
     ConsoleClientSummary,
 )
 
@@ -347,4 +350,34 @@ def update_access(
     if after != before:
         _record(db, staff, "account.access_updated", request, email=account.email, account_id=account.id, before=before, after=after)
     db.commit()
+    return _detail(db, account.id)
+
+
+@router.patch("/{client_id}/status", response_model=ConsoleClientDetail)
+def update_status(
+    client_id: int,
+    body: ConsoleClientStatusUpdate,
+    request: Request,
+    staff: Account = Depends(team_manager),
+    db: Session = Depends(get_session),
+) -> ConsoleClientDetail:
+    """Suspend an account, so it can no longer sign in or call the API, or make it active again."""
+    account = db.get(Account, client_id)
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No account with that id")
+    if account.id == staff.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You cannot suspend your own account")
+    active = body.status == "active"
+    if account.console_role == "owner" and not active:
+        if staff.console_role != "owner":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an owner can suspend another owner")
+        if account.is_active and _active_owners(db) <= 1:
+            raise HTTPException(status.HTTP_409_CONFLICT, "The console needs at least one active owner")
+    if account.is_active != active:
+        account.is_active = active
+        _record(
+            db, staff, "account.reactivated" if active else "account.suspended", request,
+            email=account.email, account_id=account.id, reason=(body.reason or "").strip() or None,
+        )
+        db.commit()
     return _detail(db, account.id)

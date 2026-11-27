@@ -1,5 +1,5 @@
 // Shapes mirror kyc-backend's schemas (app/schemas/verification.py, console.py)
-// so the mock can be swapped for real HTTP calls without touching the pages.
+// as the dashboards use them. client.ts and admin.ts map the backend's onto these.
 
 /** VerificationStatus in app/db/models.py — Shufti's event vocabulary. */
 export type VerificationStatus = 'pending' | 'in_progress' | 'passed' | 'failed' | 'needs_review' | 'expired'
@@ -39,7 +39,7 @@ export interface ExtractedDocument {
   /** The backend gives only the last four characters, e.g. "•••• 4821". */
   number: string
   nationality: string
-  /** The backend reads one full name; the mock reads surname and given names. */
+  /** The backend reads one full name; surname and given names are kept for documents read in parts. */
   full_name?: string
   surname?: string
   given_names?: string
@@ -56,7 +56,7 @@ export interface EvidenceFile {
   kind: 'document_front' | 'document_back' | 'portrait' | 'selfie'
   name: string
   size_kb: number
-  /** data: URL in the mock; the backend serves /evidence/{file_id}. */
+  /** A blob: URL of the file, fetched with the sign-in. */
   url?: string
 }
 
@@ -112,6 +112,8 @@ export interface SessionView {
   expired: boolean
   expires_at: string
   document_types: DocumentType[]
+  /** Where the company asked for the person to be sent when they finish, if anywhere. */
+  redirect_url: string | null
 }
 
 export interface QualityReport {
@@ -150,13 +152,18 @@ export interface Client {
   id: string
   name: string
   email: string
-  plan: 'Starter' | 'Business' | 'Enterprise'
+  /** The billing plan: free, payg or enterprise. */
+  plan: string
   status: 'active' | 'suspended'
   created_at: string
-  /** Set by register (the landing sign-up form). */
+  last_login_at?: string
   phone?: string
   country?: string
-  date_of_birth?: string
+  verifications: number
+  /** Passed out of those decided; undefined when none is. */
+  passRate?: number
+  /** API keys neither revoked nor expired. */
+  keys: number
 }
 
 export interface Session {

@@ -65,4 +65,9 @@ export function waited(d?: string) {
   return `${Math.floor(h / 24)}d`
 }
 
+export function fmtDate(d?: string) {
+  if (!d) return '—'
+  return new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export const pct = (x: number) => `${(x * 100).toFixed(1)}%`

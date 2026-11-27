@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './landing/landing.css'
 import './styles.css'
-import './shufti.css'
-import { ToastProvider } from './components/ui'
+import { ToastProvider, buttonClass } from './components/ui'
 import { AdminShell, ClientShell, RequireClient, RequireStaff } from './layouts/Shells'
 import { LandingPage, ResetPasswordPage, SignInPage, SignUpPage } from './landing/pages'
 import { Dashboard } from './pages/client/Dashboard'
@@ -22,13 +21,16 @@ function ScrollToTop() {
   return null
 }
 
+/** The verification pages, inside the wrapper that gives them their own shades. */
+const Verify = () => <div className="zid-ui"><ApplicantFlow /></div>
+
 function NotFound() {
   return (
-    <div className="zapp" style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', textAlign: 'center' }}>
-      <div className="col" style={{ alignItems: 'center' }}>
-        <h1 className="display" style={{ fontSize: 64 }}>404</h1>
-        <p className="muted">This page does not exist.</p>
-        <a href="/" className="btn btn-primary">Go to the home page</a>
+    <div className="zid-ui grid min-h-screen place-items-center p-6 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <h1 className="text-6xl">404</h1>
+        <p className="text-muted">This page does not exist.</p>
+        <a href="/" className={buttonClass('primary')}>Go to the home page</a>
       </div>
     </div>
   )
@@ -44,9 +46,9 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/login" element={<SignInPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/v/:token" element={<ApplicantFlow />} />
+          <Route path="/v/:token" element={<Verify />} />
           {/* The backend builds links as <VERIFY_BASE_URL>/verify/<token>. */}
-          <Route path="/verify/:token" element={<ApplicantFlow />} />
+          <Route path="/verify/:token" element={<Verify />} />
 
           <Route element={<RequireClient />}>
             <Route element={<ClientShell />}>
@@ -64,9 +66,9 @@ createRoot(document.getElementById('root')!).render(
             <Route element={<AdminShell />}>
               <Route path="/admin" element={<AdminOverview />} />
               <Route path="/admin/review" element={<ReviewQueue />} />
-              <Route path="/admin/review/:reference" element={<CaseReview />} />
+              <Route path="/admin/review/:id" element={<CaseReview />} />
               <Route path="/admin/verifications" element={<AdminVerifications />} />
-              <Route path="/admin/verifications/:reference" element={<VerificationDetail scope="staff" />} />
+              <Route path="/admin/verifications/:id" element={<VerificationDetail scope="staff" />} />
               <Route path="/admin/clients" element={<Clients />} />
             </Route>
           </Route>

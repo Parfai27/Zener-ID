@@ -163,3 +163,44 @@ def test_clients_need_a_console_token_with_kyc(client, db_session, clients):
     without_products(db_session, "noproducts@example.com")
     assert client.get("/v1/console/clients", headers=auth(no_kyc)).status_code == 403
     assert client.get("/v1/console/clients/options", headers=auth(no_kyc)).status_code == 403
+
+
+def _as_admin(db_session, email="staff@example.com"):
+    staff = db_session.scalar(select(Account).where(Account.email == email))
+    staff.console_role = "admin"
+    db_session.commit()
+
+
+def test_admins_suspend_and_reactivate_a_client(client, db_session, clients):
+    from app.db.models import AuditEvent
+
+    token = staff_token(client, db_session)
+    acme_id = listing(client, token, q="acme")["items"][0]["id"]
+    # A reviewer may look, not suspend.
+    refused = client.patch(f"/v1/console/clients/{acme_id}/status", json={"status": "suspended"}, headers=auth(token))
+    assert refused.status_code == 403
+
+    _as_admin(db_session)
+    suspended = client.patch(
+        f"/v1/console/clients/{acme_id}/status", json={"status": "suspended", "reason": "Chargebacks"}, headers=auth(token)
+    )
+    assert suspended.status_code == 200, suspended.text
+    assert suspended.json()["status"] == "suspended"
+    # The client's key stops working straight away.
+    assert client.get("/v1/verifications", headers=clients).status_code in (401, 403)
+
+    back = client.patch(f"/v1/console/clients/{acme_id}/status", json={"status": "active"}, headers=auth(token))
+    assert back.json()["status"] == "active"
+    assert client.get("/v1/verifications", headers=clients).status_code == 200
+
+    events = db_session.scalars(select(AuditEvent.event_type).where(AuditEvent.event_type.like("account.%"))).all()
+    assert events.count("account.suspended") == 1 and events.count("account.reactivated") == 1
+
+
+def test_status_is_checked(client, db_session, clients):
+    token = staff_token(client, db_session)
+    _as_admin(db_session)
+    staff = db_session.scalar(select(Account).where(Account.email == "staff@example.com"))
+    assert client.patch(f"/v1/console/clients/{staff.id}/status", json={"status": "suspended"}, headers=auth(token)).status_code == 403
+    assert client.patch("/v1/console/clients/999999/status", json={"status": "suspended"}, headers=auth(token)).status_code == 404
+    assert client.patch(f"/v1/console/clients/{staff.id}/status", json={"status": "gone"}, headers=auth(token)).status_code == 422

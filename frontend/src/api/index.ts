@@ -2,11 +2,13 @@
 //   auth.ts     sign-in, registration, password reset: the real backend
 //   client.ts   the client dashboard: API keys, verifications, metrics (backend)
 //   applicant.ts the applicant's flow on the verification link (backend)
-//   mock.ts     the admin console's data, in this browser, until connected
+//   admin.ts    the admin console: overview, review queue, verifications, clients (backend)
+//   events.ts   "something changed", so open pages reload after an action
+export * from './admin'
 export * from './applicant'
 export * from './auth'
 export * from './client'
-export * from './mock'
+export { subscribe } from './events'
 export { ApiError } from './errors'
 export { currentSession, logout } from './session'
 export type * from './types'

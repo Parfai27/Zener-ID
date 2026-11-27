@@ -49,6 +49,97 @@
   --color-review-tint: #f7f3e1;
 }
 
+/* The app: the client dashboard, the admin console and the verification pages,
+   one design (it started on the verification pages, src/pages/applicant).
+   Evergreen (brand) for rings, ticks, links and the chosen item; Deep Pine
+   (brand-deep) for primary buttons; Paper (tint) for headers, sidebars, footers
+   and choices; Mint (lit) for accents on the dark camera stage; Citrus for the
+   document guide. Status: ok, bad, warn, each with a pale -tint behind it. */
+@theme {
+  --color-mint-tint: #dcf7ec;
+  --color-ok-tint: #e3f5ec;
+  --color-bad-tint: #fdeaea;
+  --color-warn: #8a5a00;
+  --color-warn-tint: #fdf2dc;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.08);
+
+  --animate-pop: pop 0.18s ease;
+  --animate-fade: fade 0.15s ease;
+  @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  @keyframes fade { from { opacity: 0; } }
+}
+
+@theme {
+  --color-brand-hover: #0f4038;
+  --color-tint: #f3f7f2;
+  --color-lit: #2fe0a8;
+  --color-lit-hover: #5ff0c2;
+  --color-citrus-tint: #f4fbd6;
+  --color-night: #0b1614;
+  --color-faint: #92a39e;
+  --color-glyph: #26303f;
+  --color-tooltip: #1d2430;
+  --color-ok: #18794e;
+  --color-ok-fill: #34c77b;
+  --color-bad: #c62828;
+  --color-bad-fill: #d64545;
+  --color-warn-fill: #f2b440;
+
+  --shadow-disc: 0 1px 3px rgba(13, 20, 40, 0.16);
+  --shadow-disc-hover: 0 1px 6px rgba(13, 20, 40, 0.28);
+  --shadow-panel: 0 -8px 24px rgba(13, 20, 40, 0.08);
+  --shadow-sheet: 0 -8px 24px rgba(13, 20, 40, 0.12);
+
+  /* Consent and the instruction sheets lift in over the screen they are about. */
+  --animate-lift: lift 260ms cubic-bezier(0.32, 0.72, 0.3, 1);
+  --animate-drop: drop 240ms cubic-bezier(0.5, 0, 0.75, 0) 120ms both;
+  @keyframes lift { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes drop { from { transform: translateY(0); } to { transform: translateY(100%); } }
+}
+
+/* The brand's Mint to Citrus bar (guide p.10), for the face check's progress. */
+@utility bg-brand-bar {
+  background: linear-gradient(90deg, #2fe0a8, #d9f26b);
+}
+
+/* Inside the app (.zid-ui wraps the dashboards and the verification pages): its
+   shades of the names the landing page also uses, and its type. The landing page
+   keeps its own. Tailwind's colour utilities read these variables, so the
+   override applies inside the wrapper only. */
+.zid-ui {
+  --color-body: #1f2328;
+  --color-muted: #5f6368;
+  --color-line: #dde6e0;
+  --color-mist: #e8efea;
+  background: #fff;
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+@layer base {
+  .zid-ui :where(h1, h2, h3) {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+  .zid-ui :is(button, [role="button"], summary, label:has(input[type="checkbox"])) { cursor: pointer; }
+  .zid-ui :disabled { cursor: not-allowed; }
+  .zid-ui :focus-visible { outline: 3px solid var(--color-brand); outline-offset: 2px; border-radius: 6px; }
+  .zid-ui .on-night :focus-visible { outline-color: var(--color-lit); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zid-ui *, .zid-ui *::before, .zid-ui *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
