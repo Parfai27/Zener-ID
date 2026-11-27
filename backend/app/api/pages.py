@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.api.deps import legacy_only
 from app.storage import sessions
+from app.core.config import settings
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
@@ -65,13 +66,18 @@ def session_qr(token: str, request: Request) -> Response:
     query string to somebody else's server hands them a working link, and it also
     means no QR at all when that server is unreachable.
 
-    The host comes from the request, so the code points wherever the page was
-    reached from, a tunnel included. A QR of localhost is correct and useless: a
-    phone cannot reach the laptop it was drawn on.
+    It points where verification links point: VERIFY_BASE_URL when it is set,
+    since the website may reach this endpoint through a proxy on another address
+    (Vercel forwarding to the API, say), and the API's own address is not where
+    the person should go. Without it, the host comes from the request, so the
+    code points wherever the page was reached from, a tunnel included. A QR of
+    localhost is correct and useless: a phone cannot reach the laptop it was
+    drawn on.
     """
     import segno
 
-    link = f"{str(request.base_url).rstrip('/')}/verify/{token}"
+    base = settings.VERIFY_BASE_URL.strip().rstrip("/") or str(request.base_url).rstrip("/")
+    link = f"{base}/verify/{token}"
     out = io.BytesIO()
     segno.make(link, error="m").save(out, kind="svg", scale=4, dark="#10131a", light="#ffffff")
     return Response(

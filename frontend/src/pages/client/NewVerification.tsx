@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Copy, ExternalLink, Mail } from 'lucide-react'
-import { createVerification } from '../../api'
+import { createVerification, sessionQr } from '../../api'
 import type { Verification } from '../../api/types'
 import { Avatar, Button, Card, Crumb, ErrorText, Field, Input, PageHead, Pill, Select, Spinner, StatusPill, buttonClass, copyText, inputClass, useToast } from '../../components/ui'
 import { fmtDate, fullName } from '../../lib/format'
@@ -127,7 +127,7 @@ function Created({ v, onAnother }: { v: Verification; onAnother: () => void }) {
           </div>
         </Field>
         <div className="flex items-center gap-5 rounded-2xl bg-tint p-4 ring-1 ring-line">
-          <img src={`${v.session_url}/qr.svg`} width={112} height={112} alt="QR code for the verification link" className="flex-none rounded-lg bg-white p-1" />
+          <img src={sessionQr(v.session_token)} width={112} height={112} alt="QR code for the verification link" className="flex-none rounded-lg bg-white p-1" />
           <div className="flex flex-col gap-1">
             <b>Applicant next to you?</b>
             <span className="text-[12.5px] text-muted">They can scan this code with their phone to start straight away.</span>

@@ -17,6 +17,14 @@
 #   docker compose exec kyc-platform alembic upgrade head
 set -e
 
+# Started as root (Dockerfile): make the evidence folder the kyc user's, in case
+# it is a freshly mounted disk, then run this script again as kyc.
+if [ "$(id -u)" = "0" ]; then
+  mkdir -p /srv/var/evidence
+  chown kyc:kyc /srv/var /srv/var/evidence
+  exec setpriv --reuid=kyc --regid=kyc --init-groups "$0" "$@"
+fi
+
 if [ "${RUN_MIGRATIONS}" = "false" ]; then
   echo "skipping migrations (RUN_MIGRATIONS=false)"
 else

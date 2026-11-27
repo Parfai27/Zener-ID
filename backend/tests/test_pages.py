@@ -45,3 +45,16 @@ def test_the_qr_reads_back_as_the_session_link():
     image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     decoded, _, _ = cv2.QRCodeDetector().detectAndDecode(image)
     assert decoded == link
+
+
+def test_the_qr_points_at_the_website_when_it_has_its_own_address(monkeypatch):
+    """Behind a proxy (the website on Vercel forwarding to the API), the request's
+    host is the API's. The QR follows VERIFY_BASE_URL, like the links do."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "VERIFY_BASE_URL", "https://app.example.com/")
+    svg = client.get(f"/verify/{TOKEN}/qr.svg").content
+    drawn = segno.make(f"https://app.example.com/verify/{TOKEN}", error="m")
+    out = __import__("io").BytesIO()
+    drawn.save(out, kind="svg", scale=4, dark="#10131a", light="#ffffff")
+    assert svg == out.getvalue()

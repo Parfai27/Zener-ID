@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -133,6 +134,16 @@ class Settings(BaseSettings):
     YENTE_STRONG_THRESHOLD: float = 0.9
 
     DATABASE_URL: str = "postgresql+psycopg://kyc:kyc@localhost:5432/kyc"
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _psycopg_driver(cls, url: str) -> str:
+        """Hosts such as Render hand out postgres:// or postgresql:// addresses,
+        which SQLAlchemy reads as the psycopg2 driver. This service has psycopg 3."""
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
 
     # Signing key for dashboard sessions. The default is for a developer's
     # machine only: check_configuration() refuses to start with it anywhere else.
