@@ -1,0 +1,69 @@
+# Render Blueprint: the Zener ID API and its database (HOSTING.md).
+# The website is on Vercel (frontend/vercel.json) and calls this API directly.
+#
+# Render builds backend/Dockerfile on its own servers; nothing has to be built
+# on your computer. The face models are downloaded into the image while it builds.
+
+databases:
+  - name: zenerid-db
+    databaseName: kyc
+    user: kyc
+    plan: basic-256mb
+    region: frankfurt
+
+services:
+  - type: web
+    name: zenerid-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # 2 GB of memory: the OCR and face models need more than the smaller plans.
+    plan: standard
+    region: frankfurt
+    healthCheckPath: /v1/health
+    # Uploaded document photos, portraits and clips. A Render disk keeps them
+    # across deploys; without one they would be lost on every restart.
+    disk:
+      name: evidence
+      mountPath: /srv/var/evidence
+      sizeGB: 5
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: ENVIRONMENT
+        value: production
+      - key: ENABLE_DOCS
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zenerid-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EVIDENCE_DIR
+        value: /srv/var/evidence
+      # The website's address on Vercel, e.g. https://zenerid.vercel.app, in all
+      # three: links in emails, verification links and QR codes, and the only
+      # site browsers may call this API from. Asked for when the Blueprint is created.
+      - key: DASHBOARD_URL
+        sync: false
+      - key: VERIFY_BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # Password-reset emails through SendGrid.
+      - key: EMAIL_ENABLED
+        value: "true"
+      - key: SMTP_HOST
+        value: smtp.sendgrid.net
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_STARTTLS
+        value: "true"
+      - key: SMTP_USER
+        value: apikey
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

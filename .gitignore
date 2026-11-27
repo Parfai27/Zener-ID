@@ -1,0 +1,25 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Backend runtime data (models are downloaded, evidence is local)
+backend/models/
+backend/var/
+
+# Node / build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

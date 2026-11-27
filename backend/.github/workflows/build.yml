@@ -1,0 +1,215 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+  # So a secret can be corrected and the service redeployed from the Actions tab,
+  # without an empty commit: .env is written at deploy time, so a changed secret
+  # only reaches the container on the next run.
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, prod]
+    steps:
+      # This runner's /root/.gitconfig carries
+      #   url."https://<token>@github.com/".insteadOf "https://github.com/"
+      # written by another repository's deploy with `git config --global`, and the
+      # runner copies that file into every job. The rewrite turns the checkout's
+      # URL into one with a username and no password, which is exactly
+      #   fatal: could not read Password for 'https://***@github.com'
+      #
+      # Pointing GIT_CONFIG_GLOBAL at an empty file in this job's own temp directory
+      # makes git ignore that file for every step that follows, without editing
+      # anything on the machine: the fix for the machine belongs in the workflow
+      # that writes there.
+      #
+      # It is set here, from RUNNER_TEMP, rather than in the job's env: the runner
+      # context is not one a job-level env is allowed to read, and a workflow that
+      # tries is rejected whole with "Unrecognized named-value: runner".
+      - name: Ignore the machine's git config for this job
+        run: |
+          echo "GIT_CONFIG_GLOBAL=${RUNNER_TEMP}/gitconfig-for-this-job" >> "$GITHUB_ENV"
+          : > "${RUNNER_TEMP}/gitconfig-for-this-job"
+
+      # No token: the workflow's own GITHUB_TOKEN checks this repository out, and
+      # nothing here needs another repository or a private dependency.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # One echo per setting, naming the
+      # secret and writing it on the same line. A setting added to
+      # app/core/config.py that a deployment has to set is added here, once.
+      #
+      # It was briefly a list in an env block plus a second list in the script, and
+      # the two drifted twice in two days: VERIFY_BASE_URL went into one and not the
+      # other, then the script was left asking for names that no longer existed. The
+      # second time, .env came out empty and the service ran on its defaults against
+      # a database on localhost while the health check passed.
+      - name: Create .env from individual secrets
+        run: |
+          set -e
+
+          {
+            echo "ENVIRONMENT=${{ secrets.ENVIRONMENT }}";
+            echo "ENABLE_DOCS=${{ secrets.ENABLE_DOCS }}";
+            echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}";
+
+            echo "YENTE_BASE_URL=${{ secrets.YENTE_BASE_URL }}";
+            echo "YENTE_API_TOKEN=${{ secrets.YENTE_API_TOKEN }}";
+            echo "YENTE_SCREENING_DATASET=${{ secrets.YENTE_SCREENING_DATASET }}";
+            echo "YENTE_POSSIBLE_THRESHOLD=${{ secrets.YENTE_POSSIBLE_THRESHOLD }}";
+            echo "YENTE_STRONG_THRESHOLD=${{ secrets.YENTE_STRONG_THRESHOLD }}";
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}";
+            echo "REDIS_URL=${{ secrets.REDIS_URL }}";
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}";
+
+            echo "SESSION_TTL_MINUTES=${{ secrets.SESSION_TTL_MINUTES }}";
+            echo "MAX_SESSION_TTL_MINUTES=${{ secrets.MAX_SESSION_TTL_MINUTES }}";
+
+            echo "GOOGLE_SERVICE_ACCOUNT_EMAIL=${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}";
+            echo "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=${{ secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY }}";
+            echo "GOOGLE_SERVICE_ACCOUNT_JSON=${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}";
+            echo "GOOGLE_DRIVE_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}";
+            echo "GOOGLE_DRIVE_ROOT_FOLDER=${{ secrets.GOOGLE_DRIVE_ROOT_FOLDER }}";
+
+            echo "VERIFY_BASE_URL=${{ secrets.VERIFY_BASE_URL }}";
+            echo "EMAIL_ENABLED=${{ secrets.EMAIL_ENABLED }}";
+            echo "DASHBOARD_URL=${{ secrets.DASHBOARD_URL }}";
+
+            echo "BILLING_ENFORCED=${{ secrets.BILLING_ENFORCED }}";
+
+            echo "WEB_CONCURRENCY=${{ secrets.WEB_CONCURRENCY }}";
+            echo "RUN_MIGRATIONS=${{ secrets.RUN_MIGRATIONS }}";
+          } > .env.all
+
+          # The only reason this step is not just the block above. pydantic refuses an empty string
+          # where an int or a bool belongs, so an unset secret arriving as
+          # SESSION_TTL_MINUTES= stops the service instead of letting it fall back to
+          # 60. NestJS reads '' and carries on. So lines with no value are dropped,
+          # and an unset secret means the default in app/core/config.py.
+          # `|| true` because grep exits 1 when it matches nothing, which under set -e
+          # would kill the step with no message in the one case that matters most:
+          # every secret empty.
+          grep -v '=$' .env.all > .env || true
+          rm .env.all
+
+          # Names only. The values are secrets and this log is readable by anybody
+          # who can see the repository.
+          echo "wrote $(wc -l < .env) settings:"
+          cut -d= -f1 .env | sed 's/^/  /'
+
+          # Then read the file back. Without these three the service is not deployed,
+          # it is only running: no database, development mode, the published signing
+          # key. An empty .env does not fail on its own, it starts the service on every
+          # default and the health check still passes, which is how a day went by with
+          # every real request returning 500.
+          missing=""
+          for name in ENVIRONMENT DATABASE_URL JWT_SECRET; do
+            grep -q "^$name=" .env || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "these settings did not reach .env:$missing"
+            exit 1
+          fi
+
+      # The face models and the AI-generated image detector: about 290 MB that
+      # never change. Kept on the host and
+      # mounted into the container, so a rebuild does not fetch them again. Only
+      # the missing ones are downloaded, and the two large ones are checked against
+      # the hashes in the README before anything is asked to load them.
+      - name: Ensure the face models are on the host
+        run: |
+          set -e
+
+          # `mkdir -p` cannot create a directory over a file or a dangling link, and
+          # fails with "File exists". A real directory, and the models in it, is left
+          # alone: a model added later is fetched on its own below, so there is never
+          # a reason to wipe the folder and download the other 200 MB again.
+          if [ -e models ] || [ -L models ]; then
+            if [ ! -d models ]; then
+              echo "models exists but is not a directory, removing it:"
+              ls -ld models
+              rm -f models
+            fi
+          fi
+          mkdir -p models
+
+          # A file that is there but does not match its hash (an interrupted download,
+          # or a pin that has moved on) is dropped, so the downloads below fetch it
+          # again instead of the step failing on the check and failing again on the
+          # next run too.
+          drop_if_wrong() {
+            if [ -f "$2" ] && ! echo "$1  $2" | sha256sum -c - > /dev/null 2>&1; then
+              echo "$2 does not match its hash, fetching it again"
+              rm -f "$2"
+            fi
+          }
+          drop_if_wrong 5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91 models/det_10g.onnx
+          drop_if_wrong 4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43 models/w600k_r50.onnx
+          drop_if_wrong a42c7d740fbb345ba9a26d469b22f301d73089ce3c6da993877ed2b6965a8ba1 models/ai_image_detector.onnx
+
+          if [ ! -f models/face_detection_yunet_2023mar.onnx ]; then
+            echo "downloading YuNet"
+            curl -sL --fail -o models/face_detection_yunet_2023mar.onnx \
+              https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+          fi
+
+          if [ ! -f models/face_landmarker.task ]; then
+            echo "downloading the MediaPipe face landmarker"
+            curl -sL --fail -o models/face_landmarker.task \
+              https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+          fi
+
+          if [ ! -f models/det_10g.onnx ] || [ ! -f models/w600k_r50.onnx ]; then
+            echo "downloading the buffalo_l pack for SCRFD and ArcFace"
+            curl -sL --fail -o /tmp/buffalo_l.zip \
+              https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip
+            unzip -j -o /tmp/buffalo_l.zip 'det_10g.onnx' 'w600k_r50.onnx' -d models/
+            rm -f /tmp/buffalo_l.zip
+          fi
+
+          echo "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91  models/det_10g.onnx" | sha256sum -c -
+          echo "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43  models/w600k_r50.onnx" | sha256sum -c -
+
+          # The AI-generated image detector (Community Forensics ViT-S). Pinned to
+          # the revision with the author's corrected export: the older export,
+          # mirrored widely, has an untrained head and scores noise.
+          if [ ! -f models/ai_image_detector.onnx ]; then
+            echo "downloading the AI-generated image detector"
+            curl -sL --fail -o models/ai_image_detector.onnx \
+              https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT/resolve/ac6ee457bea904a373065754107451793b56db00/onnx/model.onnx
+          fi
+          echo "a42c7d740fbb345ba9a26d469b22f301d73089ce3c6da993877ed2b6965a8ba1  models/ai_image_detector.onnx" | sha256sum -c -
+
+      # No remote rewriting and no pull: the checkout above already put this
+      # commit in the workspace, and the workspace is wiped and re-fetched on
+      # every run. Pulling again would only be a way of deploying something other
+      # than what triggered the deploy.
+      - name: Deploy
+        run: |
+          set -e
+          mkdir -p var/evidence
+          chmod -R 777 var/evidence
+          # --remove-orphans takes down containers of services no longer in
+          # docker-compose.yml, so a renamed service does not keep the old port.
+          docker compose up --build -d --remove-orphans
+          # Dangling images only. A full `docker system prune -af` would throw away
+          # the build cache, and this image compiles insightface: the next deploy
+          # would take twenty minutes instead of two.
+          docker image prune -f
+
+      - name: Wait for it to answer
+        run: |
+          set -e
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:4500/v1/health > /dev/null; then
+              echo "healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the service did not become healthy; last 80 lines of its log:"
+          docker logs --tail 80 kyc-platform
+          exit 1

@@ -1,0 +1,17 @@
+/* Base styles under every page. Everything is styled with Tailwind, its theme
+   in landing/landing.css. Zener ID brand: Deep Pine #06302B,
+   Paper #F3F7F2, Evergreen #0F5246, Mint #2FE0A8, Citrus #D9F26B, Ink #0B1614.
+   Headings Manrope, body Inter. */
+:root {
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --display: 'Manrope', 'Inter', Arial, sans-serif;
+  --mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}

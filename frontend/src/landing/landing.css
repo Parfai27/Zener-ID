@@ -1,0 +1,306 @@
+@import "tailwindcss";
+
+/* Next.js set these from next/font; here the fonts come from the Google Fonts
+   link in index.html. */
+:root {
+  --font-inter: "Inter";
+  --font-manrope: "Manrope";
+}
+
+/* The landing, sign-in and register pages sit on white (the dashboard is on Paper). */
+.lp {
+  min-height: 100vh;
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Zener ID brand (brand_assets/README.md): Deep Pine #06302B, Evergreen #0F5246,
+   Mint #2FE0A8, Citrus #D9F26B, Paper #F3F7F2, Ink #0B1614. Headings in Manrope,
+   body in Inter. Colours are flat: no decorative gradients. */
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@theme {
+  --color-brand: #0f5246;
+  --color-brand-deep: #06302b;
+  --color-brand-sky: #2fe0a8;
+  --color-brand-tint: #e7f5ef;
+  --color-citrus: #d9f26b;
+  --color-paper: #f3f7f2;
+
+  --color-ink: #0b1614;
+  --color-body: #34413e;
+  --color-muted: #66746f;
+  --color-line: #e2e8e5;
+  --color-mist: #f6f8f7;
+  --color-cloud: #edf1ef;
+
+  --color-navy: #06302b;
+  --color-navy-2: #0b3d36;
+
+  --color-pass: #0f7a4b;
+  --color-pass-tint: #e5f4ec;
+  --color-review: #8a6d00;
+  --color-review-tint: #f7f3e1;
+}
+
+/* The app: the client dashboard, the admin console and the verification pages,
+   one design (it started on the verification pages, src/pages/applicant).
+   Evergreen (brand) for rings, ticks, links and the chosen item; Deep Pine
+   (brand-deep) for primary buttons; Paper (tint) for headers, sidebars, footers
+   and choices; Mint (lit) for accents on the dark camera stage; Citrus for the
+   document guide. Status: ok, bad, warn, each with a pale -tint behind it. */
+@theme {
+  --color-mint-tint: #dcf7ec;
+  --color-ok-tint: #e3f5ec;
+  --color-bad-tint: #fdeaea;
+  --color-warn: #8a5a00;
+  --color-warn-tint: #fdf2dc;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.08);
+
+  --animate-pop: pop 0.18s ease;
+  --animate-fade: fade 0.15s ease;
+  @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  @keyframes fade { from { opacity: 0; } }
+}
+
+@theme {
+  --color-brand-hover: #0f4038;
+  --color-tint: #f3f7f2;
+  --color-lit: #2fe0a8;
+  --color-lit-hover: #5ff0c2;
+  --color-citrus-tint: #f4fbd6;
+  --color-night: #0b1614;
+  --color-faint: #92a39e;
+  --color-glyph: #26303f;
+  --color-tooltip: #1d2430;
+  --color-ok: #18794e;
+  --color-ok-fill: #34c77b;
+  --color-bad: #c62828;
+  --color-bad-fill: #d64545;
+  --color-warn-fill: #f2b440;
+
+  --shadow-disc: 0 1px 3px rgba(13, 20, 40, 0.16);
+  --shadow-disc-hover: 0 1px 6px rgba(13, 20, 40, 0.28);
+  --shadow-panel: 0 -8px 24px rgba(13, 20, 40, 0.08);
+  --shadow-sheet: 0 -8px 24px rgba(13, 20, 40, 0.12);
+
+  /* Consent and the instruction sheets lift in over the screen they are about. */
+  --animate-lift: lift 260ms cubic-bezier(0.32, 0.72, 0.3, 1);
+  --animate-drop: drop 240ms cubic-bezier(0.5, 0, 0.75, 0) 120ms both;
+  @keyframes lift { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes drop { from { transform: translateY(0); } to { transform: translateY(100%); } }
+}
+
+/* The brand's Mint to Citrus bar (guide p.10), for the face check's progress. */
+@utility bg-brand-bar {
+  background: linear-gradient(90deg, #2fe0a8, #d9f26b);
+}
+
+/* Inside the app (.zid-ui wraps the dashboards and the verification pages): its
+   shades of the names the landing page also uses, and its type. The landing page
+   keeps its own. Tailwind's colour utilities read these variables, so the
+   override applies inside the wrapper only. */
+.zid-ui {
+  --color-body: #1f2328;
+  --color-muted: #5f6368;
+  --color-line: #dde6e0;
+  --color-mist: #e8efea;
+  background: #fff;
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
+}
+@layer base {
+  .zid-ui :where(h1, h2, h3) {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+  .zid-ui :is(button, [role="button"], summary, label:has(input[type="checkbox"])) { cursor: pointer; }
+  .zid-ui :disabled { cursor: not-allowed; }
+  .zid-ui :focus-visible { outline: 3px solid var(--color-brand); outline-offset: 2px; border-radius: 6px; }
+  .zid-ui .on-night :focus-visible { outline-color: var(--color-lit); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zid-ui *, .zid-ui *::before, .zid-ui *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Anything that can be pressed says so. In the base layer, so a utility such as
+   cursor-default still wins where one is set. */
+@layer base {
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="option"],
+  summary {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+::selection {
+  background: var(--color-brand-tint);
+  color: var(--color-brand-deep);
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scan {
+  0% { top: 12%; }
+  50% { top: 82%; }
+  100% { top: 12%; }
+}
+
+/* The hero reel: the scan ring filling round a face, and a pin landing on the globe. */
+@keyframes ring-fill {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* The middle face once it passes: it blurs and turns green, then shrinks away to a dot. */
+@keyframes face-out {
+  0% { filter: none; scale: 1; }
+  40% { filter: blur(5px) saturate(0.6); scale: 1; }
+  85% { scale: 0.12; }
+  100% { filter: blur(5px) saturate(0.6); scale: 0; }
+}
+
+@keyframes wash-in {
+  0% { opacity: 0; }
+  40%, 100% { opacity: 0.9; }
+}
+
+/* The scan ring follows the face down, its ticks closing into a solid ring first. */
+@keyframes ring-out {
+  0%, 40% { scale: 1; }
+  85% { scale: 0.12; }
+  100% { scale: 0; }
+}
+
+@keyframes ticks-out {
+  0% { opacity: 1; }
+  40%, 100% { opacity: 0; }
+}
+
+@keyframes solid-in {
+  0%, 15% { opacity: 0; }
+  40%, 100% { opacity: 1; }
+}
+
+/* A tab's progress bar, filling while its group shows (components/platform.tsx). */
+@keyframes tab-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes pin-drop {
+  0% { opacity: 0; translate: 0 -14px; scale: 0.6; }
+  60% { opacity: 1; translate: 0 2px; scale: 1.05; }
+  100% { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
+}
+
+@utility animate-scan {
+  animation: scan 3.2s ease-in-out infinite;
+}
+
+@utility animate-ring-fill {
+  animation: ring-fill var(--scan-ms, 1100ms) linear var(--scan-delay, 0ms) both;
+}
+
+@utility animate-face-out {
+  animation: face-out var(--leave-ms) ease-in var(--leave-delay) both;
+}
+
+@utility animate-wash-in {
+  animation: wash-in var(--leave-ms) ease-in var(--leave-delay) both;
+}
+
+@utility animate-ring-out {
+  animation: ring-out var(--leave-ms) ease-in var(--leave-delay) both;
+}
+
+@utility animate-ticks-out {
+  animation: ticks-out var(--leave-ms) ease-in var(--leave-delay) both;
+}
+
+@utility animate-solid-in {
+  animation: solid-in var(--leave-ms) ease-in var(--leave-delay) both;
+}
+
+@utility animate-pin-drop {
+  animation: pin-drop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-scan, .animate-fade-up, .animate-pin-drop, .animate-face-out, .animate-wash-in, .animate-ring-out, .animate-ticks-out, .animate-solid-in { animation: none; }
+}
+
+/* Grainy brand backgrounds (brand guidelines: "Dark gradient"). Gradients are for
+   backgrounds and large graphics only, never for buttons. */
+:root {
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='l' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  9 0 0 0 -4.9'/%3E%3C/filter%3E%3Cfilter id='d' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -9 0 0 0 4.1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23l%29'/%3E%3Crect width='100%25' height='100%25' filter='url%28%23d%29'/%3E%3C/svg%3E");
+}
+
+@utility bg-noise {
+  background-image: var(--noise);
+  background-size: 240px 240px;
+}
+
+/* Deep Pine base; Mint glow bottom right, Citrus glow top right, Evergreen glow bottom left. */
+@utility bg-brand-dark {
+  background-color: #06302b;
+  background-image:
+    radial-gradient(60% 70% at 100% 100%, rgb(47 224 168 / 0.42), transparent 70%),
+    radial-gradient(45% 55% at 100% 0%, rgb(217 242 107 / 0.26), transparent 70%),
+    radial-gradient(70% 80% at 0% 100%, rgb(15 82 70 / 0.95), transparent 70%);
+}
+
+/* Paper base; soft Mint glow top right, Citrus bottom left, Mint bottom right (brand "Light gradient", toned down). */
+@utility bg-brand-light {
+  background-color: #f3f7f2;
+  background-image:
+    radial-gradient(55% 60% at 100% 0%, rgb(47 224 168 / 0.32), transparent 70%),
+    radial-gradient(55% 60% at 0% 100%, rgb(217 242 107 / 0.38), transparent 70%),
+    radial-gradient(45% 50% at 100% 100%, rgb(47 224 168 / 0.18), transparent 70%);
+}
